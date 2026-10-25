@@ -91,3 +91,22 @@ test('each wheel contains a deep rim barrel instead of a flat opaque wheel cap',
     assert.ok(depth>.18 && depth<.30,`${rim.name} has ${depth.toFixed(3)} m axial depth`);
   }
 });
+
+test('all four wheel assemblies turn around their authored axle and restore when driving ends',async()=>{
+  const vehicle=createVehicle((await loadModel()).scene),state=createState();
+  const wheels=vehicle.parts.filter(part=>/轮胎$|轮毂$/.test(part.name));
+  assert.equal(wheels.length,8);
+  const brakes=vehicle.parts.filter(part=>part.name.endsWith('制动盘'));
+  const angle=Math.PI/3;
+  vehicle.update(state,0,'all',angle);
+  for(const wheel of wheels){
+    assert.ok(wheel.position.distanceTo(wheel.userData.base)<1e-8);
+    const up=new THREE.Vector3(0,1,0).applyQuaternion(wheel.quaternion);
+    assert.ok(Math.abs(up.x+Math.sin(angle))<1e-6,`${wheel.name} rotates in the direction of travel`);
+    const axis=new THREE.Vector3(0,0,1).applyQuaternion(wheel.quaternion);
+    assert.ok(axis.distanceTo(new THREE.Vector3(0,0,1))<1e-8);
+  }
+  for(const brake of brakes)assert.ok(brake.quaternion.angleTo(brake.userData.baseQuaternion)<1e-8);
+  vehicle.update(state,0);
+  for(const wheel of wheels)assert.ok(wheel.quaternion.angleTo(wheel.userData.baseQuaternion)<1e-8);
+});

@@ -5,6 +5,7 @@ import { explodeOffset } from './state.js';
 export function createVehicle(root) {
   const parts = [], effects = [], paintMaterials = [], lights = [];
   const yAxis = new THREE.Vector3(0,1,0);
+  const axle = new THREE.Vector3(0,0,1);
   root.traverse(node => {
     if (node.userData.effect) effects.push(node);
     if (!node.userData.part) return;
@@ -19,10 +20,11 @@ export function createVehicle(root) {
         child.castShadow = false;
         child.receiveShadow = false;
         const roof = node.name.includes('全景');
+        const privacy = child.material.name.includes('rear privacy');
         child.material = new THREE.MeshPhysicalMaterial({
           name: child.material.name,
-          color: roof ? '#253844' : '#354a50',
-          metalness: 0, roughness: .105, transmission: roof ? .12 : .72,
+          color: roof ? '#253844' : privacy ? '#203138' : '#354a50',
+          metalness: 0, roughness: .105, transmission: roof ? .12 : privacy ? .42 : .72,
           thickness: .006, ior: 1.48, attenuationColor: '#709080', attenuationDistance: .07,
           envMapIntensity: 1.1, clearcoat: 0,
           side: THREE.DoubleSide,
@@ -44,13 +46,17 @@ export function createVehicle(root) {
   });
   let lastLayer;
   const rotation = new THREE.Quaternion();
-  function update(state, progress, layer='all') {
+  function update(state, progress, layer='all', wheelAngle=0) {
     for (const part of parts) {
       const data = part.userData;
       const [x,y,z] = explodeOffset(data.offset,progress,data.start,Math.min(1,data.start+.42));
       part.position.copy(data.base);
       part.position.x += x;part.position.y += y;part.position.z += z;
       part.quaternion.copy(data.baseQuaternion);
+      if(/轮胎$|轮毂$/.test(part.name)){
+        rotation.setFromAxisAngle(axle,wheelAngle);
+        part.quaternion.premultiply(rotation);
+      }
       if (data.motion === 'door' || data.motion === 'window') {
         rotation.setFromAxisAngle(yAxis,-data.side*state.doorAngle*.95*(1-progress));
         part.quaternion.premultiply(rotation);

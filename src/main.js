@@ -3,6 +3,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createStudio } from './studio.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { createVehicle } from './vehicle.js';
+import { createInspection } from './inspection.js';
+import { createDriving } from './driving.js';
 import { createState, stepVehicle, setCharging, clamp } from './state.js';
 import './style.css';
 
@@ -53,7 +55,23 @@ async function startScene(){
   function defaultCamera(){const mobile=innerWidth<=700;return new THREE.Vector3(...(mobile?[-14.5,4.7,15]:[-7.4,2.5,9.8]));}
   camera.position.copy(defaultCamera());controls.update();
   controls.addEventListener('start',()=>{manualCamera=true;});
-  function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();if(!manualCamera)camera.position.copy(defaultCamera());}
+  let previousManual=false;
+  const inspector=createInspection({canvas,camera,controls,vehicle,resize,
+    onEnter(){previousManual=manualCamera;vehicle.root.rotation.y=0;vehicle.update(state,0,'all');},
+    onExit(){manualCamera=previousManual;readScroll();},
+    onIsolate(value,box){studio.setIsolated(value,box);},
+  });
+  const driving=createDriving({canvas,camera,controls,scene,getState:()=>state,resize,toast,
+    onEnter(){previousManual=manualCamera;vehicle.root.rotation.y=0;vehicle.update(state,0,'all');},
+    onExit(){manualCamera=previousManual;readScroll();},
+    onStage(value){studio.setDriving(value);},
+  });
+  function resize(){
+    const rect=inspector.active?inspector.stage.getBoundingClientRect():driving.active?driving.stage.getBoundingClientRect():{width:innerWidth,height:innerHeight};
+    renderer.setSize(rect.width,rect.height);camera.aspect=rect.width/rect.height;camera.updateProjectionMatrix();
+    if(inspector.active)inspector.refit();
+    if(driving.active)driving.refit();
+  }
   addEventListener('resize',resize);resize();
   function readScroll(){const rect=$('#explore').getBoundingClientRect();const mobile=innerWidth<=700;exploring=rect.top<innerHeight*.75;scrollProgress=clamp((-rect.top+innerHeight*.2)/(rect.height-innerHeight*.9));
     $('#explore-hud').hidden=!exploring;$('#nav-control').classList.toggle('active',!exploring);$('#nav-explore').classList.toggle('active',exploring);
@@ -66,29 +84,45 @@ async function startScene(){
   for(const button of document.querySelectorAll('[data-layer]'))button.addEventListener('click',()=>{layer=button.dataset.layer;document.querySelectorAll('[data-layer]').forEach(node=>node.classList.toggle('selected',node===button));});
   const raycaster=new THREE.Raycaster();const pointer=new THREE.Vector2();let pointerStart=null;
   canvas.addEventListener('pointerdown',event=>{pointerStart=[event.clientX,event.clientY];});
-  canvas.addEventListener('pointerup',event=>{if(!pointerStart||Math.hypot(event.clientX-pointerStart[0],event.clientY-pointerStart[1])>5)return;
-    pointer.set(event.clientX/innerWidth*2-1,-event.clientY/innerHeight*2+1);raycaster.setFromCamera(pointer,camera);const hit=raycaster.intersectObjects(vehicle.root.children,true)[0];if(!hit)return;
-    let node=hit.object;while(node.parent&&!node.userData.part)node=node.parent;if(node.userData.part)toast(`${node.name} · ${({body:'车身部件',cabin:'座舱部件',chassis:'底盘部件',power:'动力部件'})[node.userData.layer]}`);
+  function pickPart(event){
+    const rect=canvas.getBoundingClientRect();
+    pointer.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(pointer,camera);
+    const hit=raycaster.intersectObjects(vehicle.root.children,true)[0];if(!hit)return;
+    let node=hit.object;while(node.parent&&!node.userData.part)node=node.parent;return node.userData.part?node:null;
+  }
+  canvas.addEventListener('pointerup',event=>{if(inspector.active||driving.active||!pointerStart||Math.hypot(event.clientX-pointerStart[0],event.clientY-pointerStart[1])>5)return;
+    const node=pickPart(event);if(node)toast(`${node.name} · ${({body:'车身部件',cabin:'座舱部件',chassis:'底盘部件',power:'动力部件'})[node.userData.layer]}`);
+  });
+  canvas.addEventListener('dblclick',event=>{
+    if(inspector.active||driving.active)return;
+    const node=pickPart(event);if(!node)return;
+    const id=/轮|制动/.test(node.name)?'wheel':/纵向方灯/.test(node.name)?'lamp':/尾|后翼子板|后侧围|后挡/.test(node.name)?'rear':'front';
+    inspector.open(id,canvas);
   });
   let touchDistance=0;
   canvas.addEventListener('touchstart',event=>{if(event.touches.length===2)touchDistance=Math.hypot(event.touches[0].clientX-event.touches[1].clientX,event.touches[0].clientY-event.touches[1].clientY);},{passive:true});
-  canvas.addEventListener('touchmove',event=>{if(event.touches.length!==2)return;event.preventDefault();const next=Math.hypot(event.touches[0].clientX-event.touches[1].clientX,event.touches[0].clientY-event.touches[1].clientY);if(touchDistance>0){const direction=camera.position.clone().sub(controls.target);direction.setLength(clamp(direction.length()*touchDistance/next,5,19));camera.position.copy(controls.target).add(direction);manualCamera=true;}touchDistance=next;},{passive:false});
+  canvas.addEventListener('touchmove',event=>{if(inspector.active||driving.active||event.touches.length!==2)return;event.preventDefault();const next=Math.hypot(event.touches[0].clientX-event.touches[1].clientX,event.touches[0].clientY-event.touches[1].clientY);if(touchDistance>0){const direction=camera.position.clone().sub(controls.target);direction.setLength(clamp(direction.length()*touchDistance/next,5,19));camera.position.copy(controls.target).add(direction);manualCamera=true;}touchDistance=next;},{passive:false});
   const clock=new THREE.Clock();let lastUi=0;
   function frame(){
     const dt=Math.min(clock.getDelta(),.05);stepVehicle(state,dt);progress=reduced?scrollProgress:THREE.MathUtils.damp(progress,scrollProgress,5,dt);
-    if(exploring!==wasExploring){manualCamera=false;wasExploring=exploring;}
-    if(!manualCamera){
+    const focused=inspector.active||driving.active;
+    if(!focused&&exploring!==wasExploring){manualCamera=false;wasExploring=exploring;}
+    if(!focused&&!manualCamera){
       if(exploring){targetCamera.set(...(innerWidth<=700?[-19,11,20]:[-13.5,8.6,14.5]));controls.target.lerp(new THREE.Vector3(0,.65,0),.04);}
       else if(view==='side')targetCamera.set(0,1.4,innerWidth<=700?24:13);
       else if(view==='top')targetCamera.set(-.01,innerWidth<=700?24:12.5,-.01);
       else targetCamera.copy(defaultCamera());
       camera.position.lerp(targetCamera,reduced?1:.035);
     }
-    horizontalShift=THREE.MathUtils.damp(horizontalShift,innerWidth<=700?0:exploring?-.13:.13,4,dt);
-    camera.setViewOffset(innerWidth,innerHeight,innerWidth*horizontalShift,innerWidth<=700?innerHeight*(exploring?-.22:.13):0,innerWidth,innerHeight);
-    vehicle.root.rotation.y=exploring?progress*.2:0;
-    studio.update(progress);
-    vehicle.update(state,progress,exploring?layer:'all');controls.update();renderer.render(scene,camera);
+    if(focused)camera.clearViewOffset();
+    else{
+      horizontalShift=THREE.MathUtils.damp(horizontalShift,innerWidth<=700?0:exploring?-.13:.13,4,dt);
+      camera.setViewOffset(innerWidth,innerHeight,innerWidth*horizontalShift,innerWidth<=700?innerHeight*(exploring?-.22:.13):0,innerWidth,innerHeight);
+    }
+    vehicle.root.rotation.y=!focused&&exploring?progress*.2:0;
+    const visibleProgress=focused?0:progress;
+    studio.update(visibleProgress);
+    vehicle.update(state,visibleProgress,!focused&&exploring?layer:'all',driving.update(dt));controls.update();renderer.render(scene,camera);
     if(clock.elapsedTime-lastUi>.1){syncControls();$('#explosion-value').textContent=`${Math.round(progress*100)}%`;$('#explosion-fill').style.width=`${progress*100}%`;lastUi=clock.elapsedTime;}
     requestAnimationFrame(frame);
   }

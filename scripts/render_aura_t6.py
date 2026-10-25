@@ -8,7 +8,7 @@ from mathutils import Vector
 ROOT=Path(__file__).resolve().parents[1]
 preview='--preview' in sys.argv
 detail_view=next((arg.split('=',1)[1] for arg in sys.argv if arg.startswith('--view=')),None)
-if detail_view not in {None,'front','rear','side','wheel'}:raise ValueError('view must be front, rear, side or wheel')
+if detail_view not in {None,'front','rear','rear-quarter','side','wheel','lamp','badge'}:raise ValueError('unknown detail view')
 bpy.ops.wm.open_mainfile(filepath=str(ROOT/'models/aura-t6.blend'))
 scene=bpy.context.scene
 # Model metadata determines the assembled, unpowered presentation pose.
@@ -18,10 +18,11 @@ for obj in bpy.data.objects:
 for material in bpy.data.materials:
     if material.name.startswith('Glazing'):
         bsdf=material.node_tree.nodes.get('Principled BSDF')
-        bsdf.inputs['Base Color'].default_value=(.065,.10,.12,1)
+        privacy='rear privacy' in material.name
+        bsdf.inputs['Base Color'].default_value=(.025,.040,.045,1) if privacy else (.065,.10,.12,1)
         bsdf.inputs['Metallic'].default_value=0
         bsdf.inputs['Roughness'].default_value=.075
-        bsdf.inputs['Transmission Weight'].default_value=.7
+        bsdf.inputs['Transmission Weight'].default_value=.42 if privacy else .7
         bsdf.inputs['IOR'].default_value=1.48
 
 studio=bpy.data.collections.new('Photography studio')
@@ -57,10 +58,11 @@ bpy.ops.object.camera_add(location=(-6.3,-8.5,2.35))
 camera=bpy.context.object;camera.name='Advertising view';in_studio(camera)
 camera.rotation_euler=(Vector((0,0,.76))-camera.location).to_track_quat('-Z','Y').to_euler();camera.data.lens=60;scene.camera=camera
 if detail_view:
-    camera.location={'front':(-8,0,.84),'rear':(8,0,.84),'side':(0,-8,.84),'wheel':(-1.418,-3,.37)}[detail_view]
-    target=(-1.418,-.9,.37) if detail_view=='wheel' else (0,0,.84)
+    camera.location={'front':(-8,0,.84),'rear':(8,0,.84),'rear-quarter':(6.3,-8.5,2.35),'side':(0,-8,.84),'wheel':(-1.418,-3,.37),'lamp':(-3.5,-1.3,.83),'badge':(-3.5,0,1.12)}[detail_view]
+    target=(-2.35,0,.944) if detail_view=='badge' else (-2.24,-.75,.741) if detail_view=='lamp' else (-1.418,-.9,.37) if detail_view=='wheel' else (0,0,.84)
     camera.rotation_euler=(Vector(target)-camera.location).to_track_quat('-Z','Y').to_euler()
-    camera.data.type='ORTHO';camera.data.ortho_scale=5.5 if detail_view=='side' else .90 if detail_view=='wheel' else 2.5
+    camera.data.type='PERSP' if detail_view=='rear-quarter' else 'ORTHO'
+    camera.data.ortho_scale=5.5 if detail_view=='side' else .25 if detail_view=='badge' else .48 if detail_view=='lamp' else .90 if detail_view=='wheel' else 2.5
 scene.render.engine='CYCLES';scene.cycles.samples=96;scene.cycles.use_denoising=True;scene.cycles.max_bounces=8;scene.cycles.transparent_max_bounces=8
 try:
     preferences=bpy.context.preferences.addons['cycles'].preferences
@@ -74,7 +76,7 @@ except Exception:
 scene.render.resolution_x=1800;scene.render.resolution_y=1125;scene.render.resolution_percentage=100
 if preview:
     scene.render.resolution_x=1200;scene.render.resolution_y=750;scene.cycles.samples=24
-if detail_view in {'front','rear','wheel'}:scene.render.resolution_x=900;scene.render.resolution_y=900
+if detail_view in {'front','rear','wheel','lamp','badge'}:scene.render.resolution_x=900;scene.render.resolution_y=900
 scene.view_settings.view_transform='AgX';scene.view_settings.exposure=-.25
 scene.render.image_settings.file_format='PNG'
 filename=f'aura-t6-detail-{detail_view}.png' if detail_view else ('aura-t6-cycles-preview.png' if preview else 'aura-t6-cycles.png')

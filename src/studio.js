@@ -76,7 +76,20 @@ export async function createStudio(renderer, scene) {
     const wheelShadow=new THREE.Mesh(new THREE.PlaneGeometry(.68,.48),contact.material.clone());
     wheelShadow.rotation.x=-Math.PI/2;wheelShadow.position.set(x,.002,z);scene.add(wheelShadow);wheelShadows.push(wheelShadow);
   }
-  return { update(progress){
+  const stageFog=scene.fog,isolatedBackdrop=new THREE.Color('#151d22'),keyPosition=key.position.clone();
+  scene.add(key.target);
+  return {setDriving(value){
+    ground.visible=!value;mirror.visible=!value;
+    stageFog.near=value?35:18;stageFog.far=value?120:60;
+  },setIsolated(value,box){
+    for(const object of [ground,mirror,contact,...wheelShadows])object.visible=!value;
+    scene.background=value?isolatedBackdrop:backdrop;scene.fog=value?null:stageFog;
+    const center=value?box.getCenter(new THREE.Vector3()):new THREE.Vector3();
+    const radius=value?box.getSize(new THREE.Vector3()).length()*.65:5;
+    key.position.copy(keyPosition).add(center);key.target.position.copy(center);key.target.updateMatrixWorld(true);
+    Object.assign(key.shadow.camera,{left:-radius,right:radius,top:radius,bottom:-radius});key.shadow.camera.updateProjectionMatrix();
+    key.shadow.normalBias=value?.0004:.012;key.shadow.needsUpdate=true;
+  }, update(progress){
     const floorY=THREE.MathUtils.lerp(-.003,-1.22,progress);
     ground.position.y=floorY;mirror.position.y=floorY+.002;contact.position.y=floorY+.004;
     contact.material.opacity=.65*(1-progress);mirror.material.uniforms.strength.value=.24*(1-progress*.65);
