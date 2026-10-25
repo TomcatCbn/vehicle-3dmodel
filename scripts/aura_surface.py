@@ -71,6 +71,36 @@ def front_top(u):
     return .994+.016*u*u
 
 
+HOOD_HALF_SPAN=.865
+HOOD_HINGE=(-1.045,0,1.095)
+
+
+def front_deck_point(r,u):
+    nominal_x=-2.15+1.125*r
+    edge_z=belt_height(nominal_x)
+    edge_x,edge_w,_=side_surface(nominal_x,edge_z,'front')
+    center_x=front_surface(0,front_top(0))[0]*(1-r)-1.025*r
+    blend=smoothstep(0,.18,r)
+    corner=(1-math.sqrt(max(0,1-u**6)))*(1-blend)+u**6*blend
+    z=edge_z-.016*(1-u*u)*(1-r)**3+.028*math.sin(r*math.pi)**.8*(1-u**18)
+    z+=.009*math.exp(-((abs(u)-.77)/.055)**2)*math.sin(r*math.pi)
+    return front_surface(u*front_width(z),z) if r==0 else (center_x+(edge_x-center_x)*corner,edge_w*u,z)
+
+
+def bonnet_front(u):
+    return .19+.08*u**6
+
+
+def bonnet_rear(u):
+    return .988-.006*u**4
+
+
+def bonnet_point(s,u,depth=0):
+    r=bonnet_front(u)+(bonnet_rear(u)-bonnet_front(u))*s
+    x,y,z=front_deck_point(r,HOOD_HALF_SPAN*u)
+    return x,y,z-depth
+
+
 def front_surface(y, z):
     u = max(-1.0, min(1.0, y/front_width(z)))
     t = max(0.0, min(1.0, (z-.28)/.73))
@@ -114,6 +144,15 @@ def side_surface(x, z, end=None):
 
 
 def verify():
+    for u in [-1,-.5,0,.5,1]:
+        x,y,z=front_deck_point(0,u)
+        assert abs(z-front_top(u))<1e-9
+        assert abs(x-front_surface(y,z)[0])<1e-9
+        a=bonnet_point(0,u)
+        b=front_deck_point(bonnet_front(u)-.003,HOOD_HALF_SPAN*u)
+        assert .002<math.dist(a,b)<.006
+    assert bonnet_point(0,0)[0]>-2.14
+    assert bonnet_point(1,0)[0]>HOOD_HINGE[0]-.02
     for z in [.34,.48,.70,.90,1.0]:
         a = side_surface(-2.15,z,'front'); b = front_surface(front_width(z),z)
         c = side_surface(2.30,z,'rear'); d = rear_surface(rear_width(z),z)

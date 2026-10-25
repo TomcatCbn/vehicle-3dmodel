@@ -3,7 +3,7 @@ import { clamp } from './state.js';
 export const WHEEL_RADIUS=.372;
 export function createDriveState(){return {running:false,targetSpeed:40,speed:0,distance:0};}
 export function setDriving(drive,vehicle,on){
-  if(on&&(vehicle.doorsOpen||vehicle.doorAngle>.01||vehicle.plugged))return false;
+  if(on&&(vehicle.doorsOpen||vehicle.doorAngle>.01||vehicle.hoodOpen||vehicle.hoodAngle>.01||vehicle.plugged))return false;
   drive.running=on;
   return true;
 }

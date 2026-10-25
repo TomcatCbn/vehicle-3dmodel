@@ -47,3 +47,13 @@ test('doors and charging cable prevent starting; invalid time cannot reverse the
   drive.targetSpeed=-40;stepDrive(drive,20);
   assert.equal(drive.speed,0);
 });
+
+test('an open or still closing bonnet prevents starting',()=>{
+  const drive=createDriveState(),vehicle=createState();
+  vehicle.hoodOpen=true;
+  assert.equal(setDriving(drive,vehicle,true),false);
+  vehicle.hoodOpen=false;vehicle.hoodAngle=.4;
+  assert.equal(setDriving(drive,vehicle,true),false);
+  vehicle.hoodAngle=0;
+  assert.equal(setDriving(drive,vehicle,true),true);
+});

@@ -33,3 +33,15 @@ test('explosion is reversible, clamped, and preserves assembled positions', () =
   assert.deepEqual(explodeOffset(offset, 0, 0.2, 0.8), [0, 0, 0]);
   assert.ok(explodeOffset(offset, 0.5, 0.2, 0.8)[1] > 0);
 });
+
+test('bonnet opens and closes progressively without overshooting its requested pose',()=>{
+  const state=createState();
+  assert.equal(state.hoodOpen,false);
+  assert.equal(state.hoodAngle,0);
+  state.hoodOpen=true;stepVehicle(state,.2);
+  assert.ok(state.hoodAngle>0&&state.hoodAngle<1);
+  stepVehicle(state,10);assert.equal(state.hoodAngle,1);
+  state.hoodOpen=false;stepVehicle(state,.2);
+  assert.ok(state.hoodAngle>0&&state.hoodAngle<1);
+  stepVehicle(state,10);assert.equal(state.hoodAngle,0);
+});
