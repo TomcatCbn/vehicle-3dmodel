@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0c1013" />
+  <meta name="description" content="可操作的 3D 虚拟车辆与滚动部件拆解实验室" />
+  <title>AURA T6 — AXIS 车辆实验室</title>
+</head>
+<body>
+  <div id="app">
+    <header class="header">
+      <a href="#" class="brand" aria-label="AXIS 首页"><svg viewBox="0 0 28 28" fill="none"><path d="M3 23 14 4l11 19H3Z" stroke="currentColor" stroke-width="2"/><path d="m9 18 5-9 5 9H9Z" fill="currentColor"/></svg><span>AXIS<span class="brand-sub">VEHICLE LAB</span></span></a>
+      <nav aria-label="主导航"><a href="#" class="nav-link active" id="nav-control">车辆实验室</a><a href="#explore" class="nav-link" id="nav-explore">结构探索 <span>↗</span></a></nav>
+      <div class="local-badge"><span class="status-dot"></span>本地仿真 <span class="version">v0.1</span></div>
+    </header>
+    <main>
+      <div id="scene-stage"><canvas id="vehicle-canvas" aria-label="可旋转的三维电动车模型"></canvas><div class="scene-vignette"></div><div id="webgl-error" hidden>3D 场景暂时无法启动，请使用支持 WebGL 2 的浏览器并开启硬件加速。</div></div>
+      <section class="lab-section" id="lab">
+        <div class="model-heading"><div class="eyebrow"><span></span> VOLKSWAGEN / ID. AURA T6</div><h1>让每一次控制，<br>真实可见<span class="accent">。</span></h1><p>一台虚拟车辆，一个完整的交互世界。</p></div>
+        <div class="model-meta"><span class="model-name">ID. AURA <b>T6</b></span><span class="model-type">纯电 SUV · 官网外观参考重建</span><div class="color-options" aria-label="车身颜色"><button data-color="#43816f" class="color-swatch selected" style="--swatch:#43816f" aria-label="青瓷绿" aria-pressed="true"></button><button data-color="#b7c3cb" class="color-swatch" style="--swatch:#b7c3cb" aria-label="冰川银" aria-pressed="false"></button><button data-color="#b9afa0" class="color-swatch" style="--swatch:#b9afa0" aria-label="砂岩米" aria-pressed="false"></button><button data-color="#373d48" class="color-swatch" style="--swatch:#373d48" aria-label="曜石黑" aria-pressed="false"></button><span id="color-name">青瓷绿</span></div></div>
+        <div class="scene-tools"><div class="view-selector" aria-label="观察视角"><button data-view="perspective" class="selected" aria-pressed="true">自由视角</button><button data-view="side" aria-pressed="false">侧视</button><button data-view="top" aria-pressed="false">俯视</button></div><button class="icon-button" id="reset-camera" aria-label="重置视角" title="重置视角">↺</button><span class="drag-hint">拖动旋转 · 双指缩放</span></div>
+        <aside class="control-panel" aria-label="车辆控制台"><div class="panel-heading"><div><span class="eyebrow">LIVE CONTROLS</span><h2>车辆控制台</h2></div><span class="live-indicator"><span class="status-dot"></span>运行中</span></div>
+          <div class="control-row"><span class="control-icon" data-icon="lock"></span><div class="control-label">车锁<span id="lock-status">已锁定</span></div><button class="switch" id="lock-toggle" role="switch" aria-checked="true" aria-label="车锁"></button></div>
+          <div class="control-row"><span class="control-icon" data-icon="door"></span><div class="control-label">车门<span id="door-status">已关闭</span></div><button class="small-button" id="door-toggle">打开</button></div>
+          <div class="window-control"><div class="control-row"><span class="control-icon" data-icon="window"></span><div class="control-label">四窗开度</div><output id="window-value" for="window-range">0<span>%</span></output></div><input id="window-range" type="range" min="0" max="100" value="0" aria-label="四窗开度"/><div class="range-labels"><span>完全关闭</span><span>完全打开</span></div></div>
+          <div class="ac-control"><div class="control-row"><span class="control-icon" data-icon="wind"></span><div class="control-label">空调<span id="ac-status">已关闭</span></div><button class="switch" id="ac-toggle" role="switch" aria-checked="false" aria-label="空调"></button></div><div class="temperature-control"><button id="temp-down" aria-label="降低温度">−</button><span><b id="temperature">22</b><span>°C</span></span><button id="temp-up" aria-label="升高温度">＋</button></div></div>
+          <div class="charge-control"><div class="control-row"><span class="control-icon" data-icon="battery"></span><div class="control-label">电池与充电<span id="charge-status">充电枪未连接</span></div><span class="battery-value"><b id="battery-value">68</b><small>%</small></span></div><div class="battery-track"><div id="battery-fill"></div></div><div class="charge-actions"><button id="plug-toggle" class="small-button">连接充电枪</button><button id="charge-toggle" class="small-button" disabled>开始充电</button></div></div>
+          <div class="panel-footer"><span><i></i> 状态实时驱动模型</span><button id="reset-state">重置车辆 ↺</button></div>
+        </aside>
+        <div class="lab-bottom"><div class="telemetry"><span><i></i> 场景已就绪</span><span id="part-count">— 个独立部件</span><span>本地交互模式</span></div><a href="#explore" class="explore-link"><span class="scroll-mouse"></span><span>向下滚动，探索车辆内部</span><span>↓</span></a></div>
+      </section>
+      <section class="explore-section" id="explore" aria-label="滚动拆解车辆结构">
+        <div class="explore-intro"><div class="eyebrow">BEYOND THE SURFACE</div><h2>从整体，<br>到每一个细节<span class="accent">。</span></h2><p>滚动拆解这台车，探索外观之下的精密构成。<br>向上滚动，让每个部件回到原位。</p></div>
+        <div class="explore-chapter" data-chapter="0"><span class="chapter-number">01 / 04</span><h3>外观与车身</h3><p>车门、引擎盖与车身覆盖件依次展开，<br>呈现每一处独立结构。</p><span class="chapter-tag">BODY & EXTERIOR</span></div>
+        <div class="explore-chapter" data-chapter="1"><span class="chapter-number">02 / 04</span><h3>座舱与玻璃</h3><p>抬升的全景车顶、车窗与座椅，<br>让座舱的层次一目了然。</p><span class="chapter-tag">CABIN & GLAZING</span></div>
+        <div class="explore-chapter" data-chapter="2"><span class="chapter-number">03 / 04</span><h3>轮组与底盘</h3><p>轮胎、轮毂、制动盘向两侧分离，<br>揭开车辆行驶系统的构成。</p><span class="chapter-tag">CHASSIS & WHEELS</span></div>
+        <div class="explore-chapter" data-chapter="3"><span class="chapter-number">04 / 04</span><h3>电池与动力</h3><p>电池模组与电驱示意结构独立呈现，<br>用于观察车控状态与部件关系。</p><span class="chapter-tag">BATTERY & POWERTRAIN</span></div>
+      </section>
+      <div class="explore-hud" id="explore-hud" hidden><div class="explosion-progress"><span>ASSEMBLY EXPLORER</span><b id="explosion-value">0%</b><div><i id="explosion-fill"></i></div></div><div class="layer-buttons" aria-label="高亮部件层"><button data-layer="all" class="selected">全部部件</button><button data-layer="body">车身</button><button data-layer="cabin">座舱</button><button data-layer="chassis">底盘</button><button data-layer="power">电池</button></div><a href="#" class="back-link">↑ 回到车辆控制</a></div>
+      <footer><span class="brand-text">AXIS / VEHICLE LAB</span><span>构建可见，测试可信。</span><span>外观参考重建 · 内部结构示意</span></footer>
+    </main>
+    <div id="toast" role="status" aria-live="polite"></div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
