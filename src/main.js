@@ -15,8 +15,23 @@ let state=createState();
 let toastTimer;
 function toast(message){$('#toast').textContent=message;$('#toast').classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').classList.remove('visible'),2400);}
 function syncControls(){
+  const roofPercent=Math.round(state.sunroofPosition*100),roofTarget=Math.round(state.sunroofTarget*100);
+  for(const output of document.querySelectorAll('[data-sunroof-value]'))output.textContent=roofPercent+'%';
+  for(const range of document.querySelectorAll('[data-sunroof-range]')){
+    range.value=roofTarget;range.style.setProperty('--range-progress',roofTarget+'%');range.setAttribute('aria-valuetext','目标 '+roofTarget+'%，当前 '+roofPercent+'%');
+  }
+  const gatePercent=Math.round(state.tailgatePosition*100),moving=Math.abs(state.tailgatePosition-state.tailgateTarget)>.0001;
+  const gateStatus=moving?(state.tailgateTarget>state.tailgatePosition?'开启中 ':'关闭中 ')+gatePercent+'%':gatePercent===0?'已关闭':gatePercent===100?'已打开':'已暂停 '+gatePercent+'%';
+  for(const output of document.querySelectorAll('[data-tailgate-status]'))output.textContent=gateStatus;
+  for(const button of document.querySelectorAll('[data-tailgate-action]')){
+    button.disabled=button.dataset.tailgateAction==='stop'?!moving:button.dataset.tailgateAction==='open'?state.tailgatePosition>=.999&&state.tailgateTarget>=.999:state.tailgatePosition<=.001&&state.tailgateTarget<=.001;
+  }
   $('#lock-toggle').setAttribute('aria-checked',String(state.locked));$('#lock-status').textContent=state.locked?'已锁定':'已解锁';
   $('#door-status').textContent=state.doorsOpen?'已打开':'已关闭';$('#door-toggle').textContent=state.doorsOpen?'关闭':'打开';
+  $('#hood-status').textContent=state.hoodOpen?'已打开':'已关闭';
+  for(const button of document.querySelectorAll('[data-hood-toggle]')){
+    button.textContent=state.hoodOpen?'关闭机盖':'打开机盖';button.setAttribute('aria-pressed',String(state.hoodOpen));
+  }
   $('#ac-toggle').setAttribute('aria-checked',String(state.ac));$('#ac-status').textContent=state.ac?'运行中':'已关闭';$('#temperature').textContent=state.temperature;
   $('#window-value').innerHTML=`${Math.round(state.windowOpen*100)}<span>%</span>`;
   $('#battery-value').textContent=Math.floor(state.battery);$('#battery-fill').style.width=`${state.battery}%`;
@@ -31,6 +46,10 @@ for(const [selector,delta] of [['#temp-down',-1],['#temp-up',1]])$(selector).add
 $('#plug-toggle').addEventListener('click',()=>{state.plugged=!state.plugged;if(!state.plugged)state.charging=false;syncControls();toast(state.plugged?'充电枪已连接':'充电枪已拔出');});
 $('#charge-toggle').addEventListener('click',()=>{if(setCharging(state,!state.charging)){syncControls();toast(state.charging?'开始充电，电量按加速时间增长':'充电已停止');}});
 $('#reset-state').addEventListener('click',()=>{state=createState();$('#window-range').value=0;$('#window-range').style.setProperty('--range-progress','0%');syncControls();toast('车辆已恢复初始状态');});
+for(const range of document.querySelectorAll('[data-sunroof-range]'))range.addEventListener('input',event=>{state.sunroofTarget=clamp(Number(event.target.value)/100);syncControls();});
+for(const button of document.querySelectorAll('[data-tailgate-action]'))button.addEventListener('click',()=>{
+  state.tailgateTarget=button.dataset.tailgateAction==='open'?1:button.dataset.tailgateAction==='close'?0:state.tailgatePosition;syncControls();
+});
 syncControls();
 
 startScene().catch(error => { $('#webgl-error').hidden=false; $('#webgl-error').textContent='模型暂时无法加载，请检查本地模型文件与浏览器 WebGL 支持后刷新。'; $('.telemetry>span:first-child').textContent='模型加载失败'; $('.live-indicator').textContent='场景不可用'; console.error(error); });
@@ -56,16 +75,22 @@ async function startScene(){
   camera.position.copy(defaultCamera());controls.update();
   controls.addEventListener('start',()=>{manualCamera=true;});
   let previousManual=false;
-  const inspector=createInspection({canvas,camera,controls,vehicle,resize,
+  const inspector=createInspection({canvas,camera,controls,vehicle,resize,getState:()=>state,
     onEnter(){previousManual=manualCamera;vehicle.root.rotation.y=0;vehicle.update(state,0,'all');},
     onExit(){manualCamera=previousManual;readScroll();},
     onIsolate(value,box){studio.setIsolated(value,box);},
+    onSelect(id){if(id==='hood'){state.hoodOpen=true;state.hoodAngle=1;}vehicle.update(state,0,'all');},
   });
   const driving=createDriving({canvas,camera,controls,scene,getState:()=>state,resize,toast,
     onEnter(){previousManual=manualCamera;vehicle.root.rotation.y=0;vehicle.update(state,0,'all');},
     onExit(){manualCamera=previousManual;readScroll();},
     onStage(value){studio.setDriving(value);},
   });
+  for(const button of document.querySelectorAll('[data-hood-toggle]')){button.disabled=false;button.addEventListener('click',()=>{
+    state.hoodOpen=!state.hoodOpen;
+    if(inspector.active){state.hoodAngle=state.hoodOpen?1:0;vehicle.update(state,0,'all');inspector.refresh();}
+    syncControls();
+  });}
   function resize(){
     const rect=inspector.active?inspector.stage.getBoundingClientRect():driving.active?driving.stage.getBoundingClientRect():{width:innerWidth,height:innerHeight};
     renderer.setSize(rect.width,rect.height);camera.aspect=rect.width/rect.height;camera.updateProjectionMatrix();
@@ -96,7 +121,7 @@ async function startScene(){
   canvas.addEventListener('dblclick',event=>{
     if(inspector.active||driving.active)return;
     const node=pickPart(event);if(!node)return;
-    const id=/轮|制动/.test(node.name)?'wheel':/纵向方灯/.test(node.name)?'lamp':/尾|后翼子板|后侧围|后挡/.test(node.name)?'rear':'front';
+    const id=/轮|制动/.test(node.name)?'wheel':/天窗|全景/.test(node.name)?'roof':/前舱|机盖/.test(node.name)?'hood':/纵向方灯/.test(node.name)?'lamp':/尾|后翼子板|后侧围|后挡|后备箱/.test(node.name)?'rear':'front';
     inspector.open(id,canvas);
   });
   let touchDistance=0;

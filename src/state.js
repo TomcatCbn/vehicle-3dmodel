@@ -1,14 +1,19 @@
 export const clamp = (value, min = 0, max = 1) => Math.min(max, Math.max(min, value));
 export function createState() {
-  return { locked: true, doorsOpen: false, doorAngle: 0, hoodOpen: false, hoodAngle: 0, windowTarget: 0, windowOpen: 0, ac: false, temperature: 22, plugged: false, charging: false, battery: 68, lights: true };
+  return { locked: true, doorsOpen: false, doorAngle: 0, hoodOpen: false, hoodAngle: 0, sunroofTarget:0, sunroofPosition:0, tailgateTarget:0, tailgatePosition:0, windowTarget: 0, windowOpen: 0, ac: false, temperature: 22, plugged: false, charging: false, battery: 68, lights: true };
 }
 export function stepVehicle(state, dt) {
+  dt=Number.isFinite(dt)?Math.max(0,dt):0;
   const delta = clamp(state.windowTarget) - state.windowOpen;
   state.windowOpen = clamp(state.windowOpen + Math.sign(delta) * Math.min(Math.abs(delta), Math.max(0, dt) * 0.5));
   const doorTarget = state.doorsOpen ? 1 : 0;
   state.doorAngle += Math.sign(doorTarget - state.doorAngle) * Math.min(Math.abs(doorTarget - state.doorAngle), Math.max(0, dt) * 1.5);
   const hoodTarget=state.hoodOpen?1:0;
   state.hoodAngle+=Math.sign(hoodTarget-state.hoodAngle)*Math.min(Math.abs(hoodTarget-state.hoodAngle),Math.max(0,dt)*1.25);
+  for(const [position,target,speed] of [['sunroofPosition','sunroofTarget',.38],['tailgatePosition','tailgateTarget',.34]]){
+    const delta=clamp(state[target])-state[position];
+    state[position]=clamp(state[position]+Math.sign(delta)*Math.min(Math.abs(delta),dt*speed));
+  }
   if (!state.plugged) state.charging = false;
   if (state.charging) state.battery = clamp(state.battery + Math.max(0, dt) * 0.08, 0, 100);
   if (state.battery >= 100) state.charging = false;

@@ -13,7 +13,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 from aura_surface import (belt_height, side_width, front_width, front_surface,
                           rear_width, rear_surface, side_surface, grille_top, smoothstep, section,
-                          front_top, rear_window_point, tailgate_width, rear_split_height, diffuser_top)
+                          front_top, rear_window_point, rear_shoulder_point, tailgate_width, rear_split_height, diffuser_top,
+                          front_deck_point, bonnet_point, bonnet_front, bonnet_rear, HOOD_HALF_SPAN, HOOD_HINGE,
+                          front_deck_normal, bonnet_normal, bonnet_side_u, light_bar_point, TAILGATE_HINGE)
 from vw_emblem import V as VW_V, W as VW_W, RING_INNER as VW_RING_INNER
 OUT = ROOT / 'public/models'
 SOURCE = ROOT / 'models'
@@ -329,11 +331,12 @@ def rear_point(y,z,offset=0):
     dz=(rear_surface(y,z+h)[0]-rear_surface(y,z-h)[0])/(2*h)
     return tuple(p+Vector((1,-dy,-dz)).normalized()*offset)
 
-def text_label(text,location,size,group,rear=False):
+def text_label(text,location,size,group,rear=False,material=white,font=None):
     bpy.ops.object.text_add(location=location)
     obj=bpy.context.object
     obj.name='Badge '+text
     obj.data.body=text
+    if font:obj.data.font=font
     obj.data.size=size
     obj.data.align_x='CENTER'
     obj.data.align_y='CENTER'
@@ -341,7 +344,7 @@ def text_label(text,location,size,group,rear=False):
     matrix=Matrix(((0,0,1),(1,0,0),(0,1,0))) if rear else Matrix(((0,0,-1),(-1,0,0),(0,1,0)))
     obj.rotation_euler=matrix.to_euler()
     bpy.ops.object.convert(target='MESH')
-    return parent(obj,group,white)
+    return parent(obj,group,material)
 
 # Lower structure and energy system are explanatory simulation geometry.
 chassis=part('chassis','底盘框架','chassis',(0,0,.27),(0,0,-.35),.35)
@@ -482,7 +485,8 @@ for side in [-1,1]:
             upper=Vector((x,side*(.869-.005*u),1.132+.018*u))
         else:
             u=(x-1.61)/.69
-            upper=Vector((1.61,side*.864,1.15)).lerp(Vector(rear_window_point(1,side)),u)
+            end=Vector(rear_window_point(1,side));end.x+=.008;end.y+=side*.020
+            upper=Vector((1.61,side*.864,1.15)).lerp(end,u)
         for j in range(5):
             shoulder_vs.append(tuple(lower.lerp(upper,j/4)))
     for i in range(48):
@@ -494,7 +498,7 @@ for side in [-1,1]:
     lower_left=Vector(qpts[3]);upper_left=Vector(qpts[2])
     for j in range(n+1):
         v=j/n
-        right=Vector(rear_window_point(1-v,side));right.x+=.020*v;right.y+=side*.044*v
+        right=Vector(rear_window_point(1-v,side));right.x+=.008;right.y+=side*(.020*v+.012*(1-v)+.003)
         left=lower_left.lerp(upper_left,v)
         for i in range(n+1):
             u=i/n
@@ -600,27 +604,149 @@ for side in [-1,1]:
         mesh('Rotor perforation details',holes_vs,holes_fs,brake,black)
         box('Brake caliper',(x+.15,side*.88,.37),(.065,.06,.16),black,brake,.018)
 
-hood=part('hood','前舱盖','body',offset=(-.85,0,.95),start=.05)
-hood_vs=[];hood_fs=[];nx=64;ny=64
-for i in range(nx+1):
-    r=i/nx;nominal_x=-2.15+1.125*r;edge_z=belt_height(nominal_x)
-    edge_x,edge_w,_=side_surface(nominal_x,edge_z,'front')
-    center_x=front_surface(0,front_top(0))[0]*(1-r)-1.025*r
-    for j in range(ny+1):
-        u=math.sin((j/ny-.5)*math.pi)
-        blend=smoothstep(0,.18,r)
-        corner=(1-math.sqrt(max(0,1-u**6)))*(1-blend)+u**6*blend
-        z=edge_z-.016*(1-u*u)*(1-r)**3+.028*math.sin(r*math.pi)**.8*(1-u**18)
-        z+=.009*math.exp(-((abs(u)-.77)/.055)**2)*math.sin(r*math.pi)
-        if i==0:
-            p=front_surface(u*front_width(z),z)
-        else:p=(center_x+(edge_x-center_x)*corner,edge_w*u,z)
-        hood_vs.append(p)
-for i in range(nx):
-    for j in range(ny):
-        k=i*(ny+1)+j;hood_fs.append((k,k+ny+1,k+ny+2,k+1))
-mesh('Continuous crowned bonnet',hood_vs,hood_fs,hood,paint,.005)
+# The bonnet is a separate hinged panel, inset behind the fixed nose bridge.
 front=part('front_bumper','前保险杠','body',offset=(-1.18,0,.08),start=.06)
+hood=part('hood','前舱盖','body',HOOD_HINGE,(-.85,0,.95),.05,'hood')
+inner_paint=mat('Paint inner stamping',(.055,.22,.18),.45,.42)
+felt=mat('Bonnet insulation felt',(.008,.012,.013),0,.97)
+service_plastic=mat('Front service cover satin polymer',(.004,.006,.008),0,.54)
+service_tray=mat('Front service tray grained polymer',(.004,.006,.008),0,.72)
+for material,strength in [(service_plastic,.16),(service_tray,.27)]:
+    bsdf=material.node_tree.nodes.get('Principled BSDF')
+    bsdf.inputs['Specular IOR Level'].default_value=.15
+    noise=material.node_tree.nodes.new('ShaderNodeTexNoise');noise.inputs['Scale'].default_value=1800
+    noise.inputs['Detail'].default_value=2
+    bump=material.node_tree.nodes.new('ShaderNodeBump');bump.inputs['Strength'].default_value=strength;bump.inputs['Distance'].default_value=.00024
+    material.node_tree.links.new(noise.outputs['Fac'],bump.inputs['Height'])
+    material.node_tree.links.new(bump.outputs['Normal'],bsdf.inputs['Normal'])
+washer_blue=mat('Washer fluid blue cap',(.012,.16,.68),0,.34)
+
+def param_panel(name,fn,group,material,nx=48,ny=64,underside=False,thickness=0,normal=None):
+    vs=[];fs=[];normals=[]
+    for i in range(nx+1):
+        for j in range(ny+1):
+            s=i/nx;u=math.sin((j/ny-.5)*math.pi)
+            vs.append(fn(s,u))
+            if normal:normals.append(normal(s,u))
+    for i in range(nx):
+        for j in range(ny):
+            k=i*(ny+1)+j;face=(k,k+ny+1,k+ny+2,k+1)
+            fs.append(tuple(reversed(face)) if underside else face)
+    obj=mesh(name,vs,fs,group,material,thickness)
+    if normal:obj.data.normals_split_custom_set_from_vertices(normals)
+    return obj
+
+def polymer_uv(obj):
+    uv=obj.data.uv_layers.new(name='Polymer grain 80 mm tile')
+    for face in obj.data.polygons:
+        for loop in face.loop_indices:
+            p=obj.data.vertices[obj.data.loops[loop].vertex_index].co
+            uv.data[loop].uv=(p.x*12.5,p.y*12.5)
+    return obj
+
+param_panel('Separate crowned bonnet outer skin',bonnet_point,hood,paint,64,64,thickness=.004,normal=bonnet_normal)
+param_panel('Fixed upper nose bridge',lambda s,u:front_deck_point((bonnet_front(u)-.003)*s,HOOD_HALF_SPAN*u),front,paint,32,96,thickness=.007,normal=lambda s,u:front_deck_normal((bonnet_front(u)-.003)*s,HOOD_HALF_SPAN*u))
+param_panel('Fixed rear cowl lip',lambda s,u:front_deck_point(bonnet_rear(u)+.003+(1-bonnet_rear(u)-.003)*s,HOOD_HALF_SPAN*u),front,paint,8,64,thickness=.005,normal=lambda s,u:front_deck_normal(bonnet_rear(u)+.003+(1-bonnet_rear(u)-.003)*s,HOOD_HALF_SPAN*u))
+for side in [-1,1]:
+    fender=next(p for p in parts if p.name==f'fender_{side}_True')
+    param_panel('Upper fender shoulder beside bonnet',lambda s,u,side=side:front_deck_point(s,side*(bonnet_side_u(s)+(1-bonnet_side_u(s))*(u+1)/2)),fender,paint,80,20,underside=side<0,thickness=.005,normal=lambda s,u,side=side:front_deck_normal(s,side*(bonnet_side_u(s)+(1-bonnet_side_u(s))*(u+1)/2)))
+param_panel('Bonnet pressed inner panel',lambda s,u:bonnet_point(.025+.95*s,.965*u,.017),hood,inner_paint,48,64,underside=True,thickness=.003)
+hem=[]
+for s,u in [(0,-1),(1,-1),(1,1),(0,1),(0,-1)]:
+    if not hem:hem.append(bonnet_point(.025+.95*s,.97*u,.009))
+    else:
+        a,b=prev,(s,u)
+        hem.extend(bonnet_point(.025+.95*(a[0]+(b[0]-a[0])*i/32),.97*(a[1]+(b[1]-a[1])*i/32),.009) for i in range(1,33))
+    prev=(s,u)
+tube('Bonnet folded perimeter hem',hem,.0035,inner_paint,hood,True)
+
+def stamping_rib(name,coords,width=.025):
+    centers=[Vector(bonnet_point(s,u,.017)) for s,u in coords];vs=[];fs=[]
+    for i,p in enumerate(centers):
+        tangent=centers[min(i+1,len(centers)-1)]-centers[max(0,i-1)]
+        cross=Vector((-tangent.y,tangent.x,0)).normalized()
+        for lateral,depth in [(-1,0),(-.65,.005),(-.25,.010),(.25,.010),(.65,.005),(1,0)]:
+            v=p+cross*(width*lateral);v.z-=depth;vs.append(tuple(v))
+    for i in range(len(centers)-1):
+        for j in range(5):
+            k=i*6+j;fs.append((k,k+1,k+7,k+6))
+    mesh(name,vs,fs,hood,inner_paint,.001)
+
+for side in [-1,1]:
+    stamping_rib('Stamped perimeter reinforcement',[(.08,side*.83),(.2,side*.91),(.45,side*.93),(.76,side*.89),(.93,side*.78)],.025)
+    stamping_rib('Pressed diagonal bonnet bead',[(.18,side*.10),(.23,side*.27),(.18,side*.42),(.28,side*.68),(.26,side*.83)],.025)
+    stamping_rib('Rear hinge reinforcement bead',[(.84,side*.1),(.87,side*.35),(.82,side*.58),(.9,side*.79)],.026)
+    for s,u in [(.115,.61),(.13,.30),(.87,.82)]:
+        points=[bonnet_point(s+ds,side*(u+du),.020) for ds,du in [(-.04,-.075),(.04,-.075),(.05,-.055),(.05,.055),(.04,.075),(-.04,.075),(-.05,.055),(-.05,-.055)]]
+        mesh('Recessed inner stamping access pocket',points,[tuple(reversed(range(8)))],hood,well_liner,.002)
+        tube('Access pocket rolled edge',points,.0016,inner_paint,hood,True)
+pad_width=section([(0,.60),(.17,.84),(.55,.87),(.84,.79),(1,.60)])
+param_panel('Moulded acoustic insulation pad',lambda s,u:bonnet_point(.30+.59*s,pad_width(s)*u,.036),hood,felt,40,56,underside=True,thickness=.007)
+for side in [-1,1]:
+    tube('Insulation pad bound edge',[bonnet_point(.30+.59*i/48,side*pad_width(i/48),.039) for i in range(49)],.004,felt,hood)
+for u in [-.60,-.20,.20,.60]:
+    param_panel('Insulation retaining spring clip',lambda s,v,u=u:bonnet_point(.52+.17*s,u+.037*v,.045),hood,alloy,8,4,underside=True,thickness=.001)
+    for du in [-.025,.025]:
+        tube('Stamped clip stiffening line',[bonnet_point(.53+.15*i/12,u+du,.047) for i in range(13)],.0015,steel,hood)
+for s,u in [(.34,-.67),(.34,0),(.34,.67),(.86,-.5),(.86,.5)]:
+    x,y,z=bonnet_point(s,u,.043)
+    cylinder('Insulation fir tree retainer',(x,y,z),.009,.004,black,hood,'Z',24)
+lock_x,_,lock_z=bonnet_point(.08,0,.035)
+tube('Bonnet latch striker',[(lock_x-.018,-.035,lock_z),(lock_x-.018,-.035,lock_z-.037),(lock_x-.018,.035,lock_z-.037),(lock_x-.018,.035,lock_z)],.005,steel,hood)
+for side in [-1,1]:
+    x,y,z=bonnet_point(.10,side*.84,.023)
+    cylinder('Bonnet adjustable rubber stop',(x,y,z-.009),.012,.018,rubber,hood,'Z',32)
+    box('Bonnet hinge reinforcement',(-1.075,side*.63,1.072),(.12,.11,.018),inner_paint,hood,.006)
+
+bay=part('front_service_bay','前舱检修盖板','body',offset=(-.25,0,.46),start=.17)
+outline=rounded_outline([(-2.18,-.70,.988),(-2.00,-.83,.988),(-1.16,-.81,1.045),(-1.08,-.65,1.061),(-1.08,.65,1.061),(-1.16,.81,1.045),(-2.00,.83,.988),(-2.18,.70,.988)],.065)
+vs=[(-1.64,0,.92),*outline]
+polymer_uv(mesh('Front bay moulded perimeter tray',vs,[(0,i+1,(i+1)%len(outline)+1) for i in range(len(outline))],bay,service_tray,.012))
+tube('Continuous front compartment weather seal',outline,.010,rubber,bay,True)
+# A wide closed service panel follows the visible cover in the photo; it is not a frunk.
+vs=[];fs=[];n=128;profiles=[(1,.957),(.99,.981),(.96,.996),(.87,1.006),(.55,1.009),(0,1.010)]
+for scale,z in profiles:
+    for i in range(n):
+        a=i/n*math.tau
+        x=-1.64+scale*.435*math.copysign(abs(math.cos(a))**.5,math.cos(a))
+        y=scale*.696*math.copysign(abs(math.sin(a))**.5,math.sin(a))
+        vs.append((x,y,z))
+for j in range(len(profiles)-1):
+    for i in range(n):
+        k=j*n+i;l=j*n+(i+1)%n;fs.append((k,l,l+n,k+n))
+polymer_uv(mesh('Broad sealed service access cover',vs,fs,bay,service_plastic))
+cover_ring=[(-1.64+.43*math.copysign(abs(math.cos(i/n*math.tau))**.5,math.cos(i/n*math.tau)),.69*math.copysign(abs(math.sin(i/n*math.tau))**.5,math.sin(i/n*math.tau)),.978) for i in range(n)]
+tube('Service cover perimeter joint',cover_ring,.0035,black,bay,True)
+tube('Service cover upper moulded bead',[(x*.94+(-1.64)*.06,y*.94,1.003) for x,y,z in cover_ring],.004,service_plastic,bay,True)
+box('Maintenance key recessed well',(-1.62,-.32,1.010),(.115,.35,.008),well_liner,bay,.025)
+tube('Service key handle',[(-1.65,-.45,1.018),(-1.65,-.21,1.018),(-1.60,-.19,1.018),(-1.59,-.21,1.018)],.006,black,bay)
+for x in [-2.08,-1.15]:
+    for y in [-.67,0,.67]:
+        cylinder('Service tray captive fastener',(x,y,.994 if x<-2 else 1.049),.011,.005,black,bay,'Z',24)
+box('Washer neck plinth',(-1.86,-.716,1.003),(.095,.10,.025),black,bay,.014)
+cylinder('Washer reservoir filler neck',(-1.86,-.716,1.014),.031,.032,white,bay,'Z',40)
+cylinder('Blue washer fluid filler cap',(-1.86,-.716,1.033),.038,.009,washer_blue,bay,'Z',64)
+box('Washer cap finger tab',(-1.893,-.716,1.035),(.025,.048,.009),washer_blue,bay,.004)
+tube('Washer symbol windscreen',[(-1.875,-.733,1.039),(-1.855,-.737,1.039),(-1.845,-.716,1.039),(-1.855,-.695,1.039),(-1.875,-.699,1.039)],.001,white,bay)
+box('Windscreen lower cowl',(-1.082,0,1.075),(.13,1.56,.04),black,bay,.017)
+for y0,y1 in [(-.68,.15),(.08,.68)]:
+    tube('Front wiper arm',[(-1.01,y0,1.117),(-.985,(y0+y1)/2,1.135),(-1.004,y1,1.128)],.0065,black,bay)
+    tube('Front wiper blade',[(-1.003,y0+.06,1.137),(-1.003,y1,1.143)],.009,black,bay)
+for side in [-1,1]:
+    box('Body hinge bracket',(-1.076,side*.66,1.036),(.09,.08,.06),steel,bay,.006)
+    fixed=(-1.17,side*.77,.962);moving=bonnet_point(.40,side*.91,.024)
+    length=(Vector(moving)-Vector(fixed)).length
+    strut=part(f'bonnet_strut_{side}',('左' if side>0 else '右')+'机盖撑杆','body',fixed,(-.25,side*.08,.46),.17,'hood_strut')
+    strut['moving']=[moving[0],moving[2],-moving[1]]
+    strut['hinge']=[HOOD_HINGE[0],HOOD_HINGE[2],-HOOD_HINGE[1]]
+    strut['piston_length']=.38
+    cylinder('Bonnet gas strut barrel',(fixed[0],fixed[1],fixed[2]+.17),.010,.34,black,strut,'Z',32)
+    piston=cylinder('Bonnet gas strut piston',(fixed[0],fixed[1],fixed[2]+length-.19),.0045,.38,alloy,strut,'Z',24)
+    piston['strut_component']='piston'
+    tip=cylinder('Bonnet gas strut upper socket',(fixed[0],fixed[1],fixed[2]+length),.012,.025,black,strut,'Z',24)
+    tip['strut_component']='tip'
+    strut.rotation_euler=(Vector(moving)-Vector(fixed)).to_track_quat('Z','Y').to_euler()
+
 # A curved fascia grid wraps around both corners instead of a flat cube.
 vs=[];fs=[];ny=96;nz=48
 for j in range(nz+1):
@@ -662,7 +788,7 @@ for j in range(12):
 mesh('Recessed active grille',intake_vs,intake_fs,front,black,.004)
 for z in [.337,.385,.431]:
     width=.74 if z<.36 else .67 if z<.4 else .57
-    tube('Horizontal intake louvre',[(front_surface(y,z)[0]+.012,y,z) for y in [-width+2*width*i/48 for i in range(49)]],.006,black,front)
+    param_panel('Flat horizontal intake louvre',lambda s,u,z=z,width=width:(front_surface(u*width,z)[0]+.012,u*width,z-.004+.008*s),front,black,2,48,thickness=.014)
 for y in [-.53,0,.53]:
     tube('Grille vertical divider',[(front_surface(y,z)[0]+.008,y,z) for z in [.30,.36,.43]],.006,black,front)
 tube('Intake upper rolled edge',[(front_surface(y,grille_top(y))[0]+.003,y,grille_top(y)) for y in [-.82+1.64*i/72 for i in range(73)]],.007,black,front)
@@ -673,26 +799,42 @@ for side in [-1,1]:
         cylinder('Front parking sensor',(x-.004,y,z),.012,.004,paint,front,'X',24)
 plate_x=front_surface(0,.620)[0]-.013
 box('Front license plate',(plate_x,0,.620),(.014,.42,.135),black,front,.009)
+mesh('Lower central plate support',[(front_surface(y,z)[0]-.003,y,z) for y,z in [(-.19,.552),(-.155,.43),(.155,.43),(.19,.552)]],[(0,1,2,3)],front,black,.012)
 text_label('ID. AURA T6',(plate_x-.009,0,.620),.036,front)
 badge(front,front_surface(0,.944)[0]-.003,.944)
 lightbar=part('front_light_bar','前贯穿灯带','body',offset=(-1.2,0,.25),start=.1)
-band_vs=[];band_fs=[]
-for top in [False,True]:
-    for i in range(49):
-        u=math.sin((i/48-.5)*math.pi);y=u*.856
-        z=(.918 if not top else .977)+.029*abs(u)**6
-        x=front_surface(y,z)[0]-.004;band_vs.append((x,y,z))
-for i in range(48):band_fs.append((i,i+49,i+50,i+1))
-mesh('Swept headlight fascia',band_vs,band_fs,lightbar,black,.004)
+param_panel('Rounded continuous light bar housing',lambda v,u:light_bar_point(u,v,.0015),lightbar,black,20,128)
+bar_lens=lamp_glass.copy();bar_lens.name='Front light bar smoked optical lens'
+bar_bsdf=bar_lens.node_tree.nodes.get('Principled BSDF')
+bar_bsdf.inputs['Base Color'].default_value=(.055,.070,.080,1)
+bar_bsdf.inputs['Transmission Weight'].default_value=.76
+bar_bsdf.inputs['Roughness'].default_value=.07
+param_panel('Continuous rounded light bar optical cover',lambda v,u:light_bar_point(u,v,.005),lightbar,bar_lens,20,128)
+boundary=[(u,0) for u in [-1+2*i/96 for i in range(97)]]
+boundary.extend((1,i/32) for i in range(1,33))
+boundary.extend((1-2*i/96,1) for i in range(1,97))
+boundary.extend((-1,1-i/32) for i in range(1,32))
+edge_vs=[light_bar_point(u,v,offset) for offset in [0,.005] for u,v in boundary];n=len(boundary)
+mesh('Rolled light bar perimeter return',edge_vs,[(i+n,(i+1)%n+n,(i+1)%n,i) for i in range(n)],lightbar,black)
+tube('Thin light bar sealing edge',[light_bar_point(u,v,.004) for u,v in boundary],.0013,black,lightbar,True)
+bar_reflector=mat('Front guide dark optical channels',(.018,.025,.032),.35,.30)
+bar_led=mat('Front flat light guide LED',(.52,.64,.72),0,.26,.65)
 for side in [-1,1]:
-    led_points=[]
-    for i in range(30):
-        y=side*(.08+.73*i/29);u=abs(y)/.856;z=.936+.035*u**7
-        led_points.append((front_surface(y,z)[0]-.010,y,z))
-    tube('Continuous slim running light',led_points,.0028,led,lightbar)
-    brow=[]
-    for y,z in [(side*.53,.958),(side*.76,.969),(side*.845,.995)]:brow.append((front_surface(y,z)[0]-.008,y,z))
-    tube('Brow light guide',brow,.006,led,lightbar,smooth=True)
+    for center in [.65,.77,.89]:
+        points=[light_bar_point(side*(center+du),v,.003) for du,v in [(-.042,.37),(.042,.37),(.042,.61),(-.042,.61)]]
+        mesh('Recessed end optical channel',points,[(0,1,2,3)] if side<0 else [(3,2,1,0)],lightbar,bar_reflector,.001)
+    for name,start,end,v,width in [('Slim flat running light',.09,.965,.20,.025),('Tapered outboard light guide',.60,.965,.75,.045)]:
+        vs=[];fs=[];n=64
+        for row in [-1,1]:
+            for i in range(n+1):
+                t=i/n;u=side*(start+(end-start)*t)
+                taper=smoothstep(0,.10,t)*(1-smoothstep(.88,1,t))
+                vs.append(light_bar_point(u,v+row*width*taper,.0035))
+        for i in range(n):
+            face=(i,i+1,i+n+2,i+n+1)
+            fs.append(tuple(reversed(face)) if side>0 else face)
+        mesh(name,vs,fs,lightbar,bar_led)
+for side in [-1,1]:
     lamp_x=front_surface(side*.75,.741)[0]
     lamp=part(f'headlight_{side}',('左' if side>0 else '右')+'纵向方灯','body',(lamp_x,side*.75,.741),(-1.2,side*.12,.18),.12)
     def lp(depth,dy,dz):return (lamp_x+depth,side*(.75+dy),.741+dz)
@@ -737,30 +879,40 @@ for side in [-1,1]:
 windscreen=part('windscreen','前挡风玻璃','cabin',offset=(-.45,0,1.2),start=.18)
 loft('Curved windscreen',[(-1.025,1.103,.868),(-.86,1.265,.825),(-.60,1.475,.780),(-.32,1.60,.740)],windscreen,glass,.022,0)
 roof=part('panoramic_roof','全景玻璃车顶','cabin',offset=(0,0,1.9),start=.22)
-roof_vs=[];roof_fs=[];nx=96;ny=48
-for i in range(nx+1):
-    x=-.32+2.02*i/nx
-    for j in range(ny+1):
-        u=j/ny*2-1;roof_vs.append((x,roof_w(x)*u,roof_z(x)+.022*(1-u*u)))
-for i in range(nx):
-    for j in range(ny):
-        k=i*(ny+1)+j;roof_fs.append((k,k+ny+1,k+ny+2,k+1))
-mesh('Crowned panoramic roof',roof_vs,roof_fs,roof,glass)
+def roof_point(x,y):return (x,y,roof_z(x)+.022*(1-(y/roof_w(x))**2))
+param_panel('Fixed rear panoramic glass',lambda s,u:roof_point(.735+.965*s,roof_w(.735+.965*s)*u),roof,glass,48,48,thickness=.005)
+param_panel('Fixed front roof header',lambda s,u:roof_point(-.32+.085*s,roof_w(-.32+.085*s)*u),roof,glass,8,48,thickness=.005)
+for side in [-1,1]:
+    param_panel('Fixed glass aperture side surround',lambda s,u,side=side:roof_point(-.235+.970*s,side*(.605+(roof_w(-.235+.970*s)-.605)*(u+1)/2)),roof,glass,48,8,underside=side<0,thickness=.005)
+    tube('Sunroof sliding guide rail',[(-.23+1.72*i/48,side*.618,roof_z(-.23+1.72*i/48)+.006) for i in range(49)],.006,black,roof)
+seal=[]
+for x,y in [(-.235,-.604),(.735,-.604),(.735,.604),(-.235,.604),(-.235,-.604)]:
+    if not seal:seal.append(roof_point(x,y))
+    else:
+        a=last
+        seal.extend(roof_point(a[0]+(x-a[0])*i/24,a[1]+(y-a[1])*i/24) for i in range(1,25))
+    last=(x,y)
+tube('Sunroof continuous aperture seal',seal,.004,rubber,roof,True)
+sunroof=part('sunroof','电动天窗','cabin',(-.23,0,1.60),(0,0,2.12),.23,'sunroof')
+param_panel('Sliding front sunroof glass',lambda s,u:roof_point(-.23+.96*s,.600*u),sunroof,glass,48,48,thickness=.005)
+for side in [-1,1]:
+    box('Sunroof sliding carriage',(.43,side*.573,1.613),(.12,.035,.035),black,sunroof,.006)
+
 for side in [-1,1]:
     rack=part(f'roof_rack_{side}',('左' if side>0 else '右')+'行李架','body',offset=(0,side*.2,2.05),start=.25)
     tube('Roof rail',[(-.17,side*.655,1.655),(.10,side*.655,1.684),(1.08,side*.66,1.67),(1.48,side*.66,1.59)],.012,black,rack,smooth=True)
     for x,z in [(-.15,1.645),(1.26,1.617)]:box('Roof rail foot',(x,side*.655,z),(.16,.055,.06),black,rack,.02)
-spoiler=part('rear_spoiler','后扰流板','body',offset=(.6,0,1.45),start=.2)
+spoiler=part('rear_spoiler','后扰流板','body',TAILGATE_HINGE,(.6,0,1.45),.2,'tailgate')
 spoiler_vs=[];spoiler_fs=[];nx=32;ny=64
-spoiler_height=section([(0,1.568),(.40,1.536),(.75,1.523),(1,1.519)])
-spoiler_width=section([(0,.770),(.40,.800),(.80,.825),(1,.800)])
+spoiler_height=section([(0,1.535),(.40,1.545),(.75,1.536),(1,1.524)])
+spoiler_width=section([(0,.752),(.40,.775),(.80,.786),(1,.762)])
 for bottom in [False,True]:
     for i in range(nx+1):
         r=i/nx
         for j in range(ny+1):
             u=math.sin((j/ny-.5)*math.pi)
-            x=1.48+.43*r+.045*(1-r)*u**6-.055*r*u**8
-            z=spoiler_height(r)+.014*(1-u*u)-(.028 if bottom else 0)
+            x=1.68+.30*r+.025*(1-r)*u**6-.035*r*u**8
+            z=spoiler_height(r)+.011*(1-u*u)-(.018 if bottom else 0)
             spoiler_vs.append((x,spoiler_width(r)*u,z))
 count=(nx+1)*(ny+1)
 for i in range(nx):
@@ -776,11 +928,11 @@ for i in [0,nx]:
         k=i*(ny+1)+j;face=(k,k+1,k+1+count,k+count)
         spoiler_fs.append(face if i==0 else tuple(reversed(face)))
 mesh('Rounded integrated roof spoiler',spoiler_vs,spoiler_fs,spoiler,paint,bevel=.003)
-loft('Spoiler dark underside',[(1.68,1.491,.786),(1.855,1.487,.794)],spoiler,black,.009,.006)
-box('High mounted stop lamp',(1.915,0,1.505),(.010,.59,.012),red,spoiler,.005)
-box('Rear upper camera housing',(1.90,0,1.469),(.042,.078,.039),black,spoiler,.014)
-cylinder('Rear upper camera lens',(1.925,0,1.469),.012,.005,glass,spoiler,'X',24)
-rear_glass=part('rear_glass','后挡风玻璃','cabin',offset=(.7,0,1.2),start=.2)
+loft('Spoiler dark underside',[(1.76,1.512,.768),(1.955,1.507,.760)],spoiler,black,.006,.005)
+box('High mounted stop lamp',(1.983,0,1.517),(.010,.52,.008),red,spoiler,.003)
+box('Rear upper camera housing',(1.94,0,1.499),(.042,.078,.029),black,spoiler,.012)
+cylinder('Rear upper camera lens',(1.966,0,1.499),.010,.005,glass,spoiler,'X',24)
+rear_glass=part('rear_glass','后挡风玻璃','cabin',TAILGATE_HINGE,(.7,0,1.2),.2,'tailgate')
 backlight_vs=[];backlight_fs=[];nx=48;ny=96
 for i in range(nx+1):
     for j in range(ny+1):backlight_vs.append(rear_window_point(i/nx,math.sin((j/ny-.5)*math.pi)))
@@ -788,26 +940,33 @@ for i in range(nx):
     for j in range(ny):
         k=i*(ny+1)+j;backlight_fs.append((k,k+ny+1,k+ny+2,k+1))
 mesh('Convex rear windscreen',backlight_vs,backlight_fs,rear_glass,rear_glazing)
+def rear_glass_detail_point(t,u,offset=.002):
+    x,y,z=rear_window_point(t,u)
+    return x+offset,y,z
+for a,b,c,d in [(0,.075,-1,1),(.945,1,-1,1),(.075,.945,-1,-.965),(.075,.945,.965,1)]:
+    param_panel('Rear glass ceramic edge',lambda s,u:rear_glass_detail_point(a+(b-a)*s,c+(d-c)*(u+1)/2),rear_glass,black,12,32)
+heater=mat('Rear glass heater conductor',(.055,.025,.012),.12,.62)
+for t in [.25+.075*i for i in range(9)]:
+    tube('Rear window heating trace',[rear_glass_detail_point(t,-.92+1.84*i/48,.0025) for i in range(49)],.00035,heater,rear_glass)
 for side in [-1,1]:
     tube('Rear glass edge seal',[rear_window_point(i/64,side) for i in range(65)],.0035,black,rear_glass)
 def wiper_point(y,z,offset=.012):
-    t=(1.50-z)/.375
+    t=(1.50-z)/.360
     for _ in range(5):
-        u=y/(.735+.095*t)
-        t+=(rear_window_point(t,u)[2]-z)/.375
-    x=rear_window_point(t,y/(.735+.095*t))[0]
+        u=y/(.640+.095*t)
+        t+=(rear_window_point(t,u)[2]-z)/.360
+    x=rear_window_point(t,y/(.640+.095*t))[0]
     return (x+offset,y,z)
 cylinder('Rear wiper pivot',wiper_point(.11,1.195),.022,.016,black,rear_glass,'X',24)
 tube('Rear wiper arm',[wiper_point(.11,1.195),wiper_point(-.12,1.19),wiper_point(-.26,1.18)],.007,black,rear_glass)
 tube('Rear wiper blade',[wiper_point(y,1.183,.020) for y in [-.31+.41*i/24 for i in range(25)]],.009,black,rear_glass)
-tailgate=part('tailgate','尾门','body',offset=(1.12,0,.6),start=.1)
+tailgate=part('tailgate','尾门','body',TAILGATE_HINGE,(1.12,0,.6),.1,'tailgate')
 deck_vs=[];deck_fs=[];nx=16;ny=64
 for i in range(nx+1):
     r=i/nx
     for j in range(ny+1):
-        u=(j/ny*2-1)*tailgate_width(1.105)/rear_width(1.105);end_x=rear_surface(u*rear_width(1.105),1.105)[0]
-        start_x=rear_window_point(1,u)[0]
-        deck_vs.append((start_x*(1-r)+end_x*r,u*(.830*(1-r)+rear_width(1.105)*r),1.125-.020*r+.006*math.sin(r*math.pi)*(1-u*u)))
+        u=j/ny*2-1
+        deck_vs.append(rear_shoulder_point(r,u))
 for i in range(nx):
     for j in range(ny):
         k=i*(ny+1)+j;deck_fs.append((k,k+1,k+ny+2,k+ny+1))
@@ -847,17 +1006,18 @@ for side in [-1,1]:
     for i in range(nx+1):
         r=i/nx
         for j in range(ny+1):
-            u=side*(start_u+(1-start_u)*j/ny)
-            x,y,z=rear_window_point(1,u);end=rear_surface(u*rear_width(1.105),1.105)
-            vs.append((x*(1-r)+end[0]*r,y*(1-r)+end[1]*r,z*(1-r)+end[2]*r))
+            y=side*(tailgate_width(1.105)+.004+(rear_width(1.105)-tailgate_width(1.105)-.004)*j/ny)
+            vs.append(rear_shoulder_point(r,y/tailgate_width(1.105)))
     for i in range(nx):
         for j in range(ny):
             k=i*(ny+1)+j;face=(k,k+1,k+ny+2,k+ny+1)
             fs.append(face if side<0 else tuple(reversed(face)))
     mesh('Fixed rolled rear corner shoulder',vs,fs,quarter,paint,.006)
 badge(tailgate,rear_surface(0,1.061)[0]+.005,1.061,True)
-text_label('I D. A U R A',(rear_surface(0,.963)[0]+.005,0,.963),.026,tailgate,True)
-text_label('T6',(rear_surface(.65,.74)[0]+.01,.65,.74),.026,tailgate,True)
+text_label('I D. A U R A',(rear_surface(0,.963)[0]+.005,0,.963),.030,tailgate,True,black)
+text_label('T6',(rear_surface(.64,.765)[0]+.01,.64,.765),.027,tailgate,True,black)
+rear_font=bpy.data.fonts.load('/System/Library/Fonts/STHeiti Medium.ttc')
+text_label('一汽-大众',(rear_surface(-.57,.765)[0]+.008,-.57,.765),.025,tailgate,True,black,rear_font)
 lower_seal=[]
 for i in range(65):
     u=i/64*2-1;z=.67
@@ -893,17 +1053,18 @@ mesh('Contoured rear diffuser',diffuser_vs,diffuser_fs,rear_bumper,black,.012)
 insert_vs=[];insert_fs=[];ny=64;nz=12
 for j in range(nz+1):
     for i in range(ny+1):
-        u=i/ny*2-1;y=u*.76;bottom=.318+.010*u**4;top=.432+.033*u**6
+        u=i/ny*2-1;y=u*.76;bottom=.318+.010*u**4;top=.447-.037*smoothstep(.35,1,abs(u))
         z=bottom+(top-bottom)*j/nz;insert_vs.append(rear_point(y,z,.014))
 for j in range(nz):
     for i in range(ny):
         k=j*(ny+1)+i;insert_fs.append((k,k+1,k+ny+2,k+ny+1))
 mesh('Recessed lower valance insert',insert_vs,insert_fs,rear_bumper,valance_black,.004)
+tube('Lower valance arched rim',[rear_point(y,.447-.037*smoothstep(.35,1,abs(y/.76)),.017) for y in [-.76+1.52*i/64 for i in range(65)]],.003,black,rear_bumper)
 tube('Diffuser curved lower lip',[rear_point(y,.315+.008*(y/.78)**4,.016) for y in [-.78+1.56*i/64 for i in range(65)]],.006,black,rear_bumper)
 for side in [-1,1]:
     for name,margin,material in [('Recessed reflector surround',.008,black),('Swept rear reflector',0,reflector_red)]:
         outline=[]
-        for y,z in [(.48-margin,.552-margin),(.78+margin,.570-margin),(.78+margin,.604+margin),(.54-margin,.587+margin)]:
+        for y,z in [(.46-margin,.566-margin),(.79+margin,.566-margin),(.79+margin,.602+margin),(.53-margin,.602+margin)]:
             outline.append((rear_surface(side*y,z)[0]+(.007 if margin else .009),side*y,z))
         outline=rounded_outline(outline,.012)
         center=sum(outline,Vector())/len(outline);offset=.007 if margin else .009
@@ -917,52 +1078,136 @@ for side in [-1,1]:
                 face=(0,a,b) if j==1 else (a-n,a,b,b-n)
                 fs.append(face if side>0 else tuple(reversed(face)))
         mesh(name,vs,fs,rear_bumper,material,.001)
-    for y in [side*.42,side*.81]:
-        x=rear_surface(y,.6)[0]
-        cylinder('Rear parking sensor',(x+.003,y,.6),.012,.004,paint,rear_bumper,'X',24)
-plate_x=rear_surface(0,.566)[0]+.012
-box('Rear license plate',(plate_x,0,.566),(.018,.44,.145),black,rear_bumper,.012)
-text_label('ID. AURA T6',(plate_x+.013,0,.566),.042,rear_bumper,True)
-rear_lights=part('tail_lights','后贯穿尾灯','body',offset=(1.18,0,.27),start=.12)
-lamp_vs=[];lamp_fs=[];ny=96;nz=8
-for j in range(nz+1):
-    z=1.045+.060*j/nz
-    for i in range(ny+1):
-        u=math.sin((i/ny-.5)*math.pi)
-        lamp_vs.append(rear_point(u*rear_width(z),z,.006))
-for j in range(nz):
+    for y,z in [(side*.32,.38),(side*.77,.41)]:
+        x=rear_surface(y,z)[0]
+        cylinder('Rear parking sensor',(x+.024,y,z),.012,.004,black,rear_bumper,'X',24)
+plate_x=rear_surface(0,.555)[0]+.012
+box('Rear license plate',(plate_x,0,.555),(.018,.50,.145),black,rear_bumper,.012)
+text_label('ID. AURA T6',(plate_x+.013,0,.555),.042,rear_bumper,True)
+rear_lights=part('tail_lights','后贯穿尾灯','body',TAILGATE_HINGE,(1.18,0,.27),.12,'tailgate')
+rear_led=mat('Rear fine light guide LED',(.42,.004,.008),0,.3,1.3)
+rear_optic=mat('Rear ruby optical chamber',(.085,.002,.004),.15,.23)
+rear_lens=lamp_glass.copy();rear_lens.name='Rear smoked optical cover'
+rear_lens.node_tree.nodes.get('Principled BSDF').inputs['Base Color'].default_value=(.030,.018,.022,1)
+rear_lens.node_tree.nodes.get('Principled BSDF').inputs['Transmission Weight'].default_value=.64
+
+def rear_band(group,side=None):
+    def y_value(u,z):
+        if side is None:return u*(tailgate_width(z)-.002)
+        q=(u+1)/2
+        return side*((tailgate_width(z)+.002)*(1-q)+(rear_width(z)-.002)*q)
+    for name,material,depth in [('Rear light bar backing',black,.002),('Rear light bar optical cover',rear_lens,.008)]:
+        vs=[];fs=[];ny=80;nz=8
+        for j in range(nz+1):
+            z=1.029+.076*j/nz
+            for i in range(ny+1):
+                u=math.sin((i/ny-.5)*math.pi);vs.append(rear_point(y_value(u,z),z,depth))
+        for j in range(nz):
+            for i in range(ny):
+                k=j*(ny+1)+i;face=(k,k+1,k+ny+2,k+ny+1)
+                fs.append(face if side is None or side>0 else tuple(reversed(face)))
+        mesh(name,vs,fs,group,material)
+    vs=[];fs=[];ny=80
+    for z in [1.0585,1.0645]:
+        for i in range(ny+1):
+            u=i/ny*2-1;y=y_value(u,z)
+            vs.append(rear_point(y,z,.009))
     for i in range(ny):
-        k=j*(ny+1)+i;lamp_fs.append((k,k+1,k+ny+2,k+ny+1))
-mesh('Continuous curved tail lamp lens',lamp_vs,lamp_fs,rear_lights,black,.003)
+        # The emblem covers the central gap in the light guide.
+        if side is None and abs(vs[i][1])<.075:continue
+        face=(i,i+1,i+ny+2,i+ny+1)
+        fs.append(face if side is None or side>0 else tuple(reversed(face)))
+    mesh('Single slim red rear light guide',vs,fs,group,rear_led,.001)
+    for z0,z1,name,material in [(1.083,1.096,'Ruby upper tail lamp chamber',rear_optic),(1.032,1.036,'Lower tail lamp separator',black)]:
+        vs=[];fs=[]
+        for z in [z0,z1]:
+            for i in range(ny+1):
+                y=y_value(i/ny*2-1,z);vs.append(rear_point(y,z,.0095))
+        for i in range(ny):fs.append((i,i+1,i+ny+2,i+ny+1) if side is None or side>0 else (i+ny+1,i+ny+2,i+1,i))
+        mesh(name,vs,fs,group,material)
+
+rear_band(rear_lights)
 for side in [-1,1]:
-    for height in [1.062,1.090]:
-        vs=[];fs=[];n=72
-        for z in [height-.0027,height+.0027]:
-            for i in range(n+1):
-                y=side*(.08+(rear_width(z)-.08)*math.sin(i/n*math.pi/2))
-                vs.append(rear_point(y,z,.010))
-        for i in range(n):
-            face=(i,i+1,i+n+2,i+n+1);fs.append(face if side>0 else tuple(reversed(face)))
-        mesh('Flat rear light guide',vs,fs,rear_lights,red,.001)
+    outer=part(f'outer_tail_lamp_{side}',('左' if side>0 else '右')+'外侧尾灯','body',offset=(.8,side*.35,.26),start=.13)
+    rear_band(outer,side)
+    for y0 in [side*.47,side*.56,side*.65,side*.795]:
+        group=rear_lights if abs(y0)<.75 else outer
+        points=[rear_point(y,z,.0097) for y,z in [(y0-.030,1.042),(y0+.030,1.042),(y0+.030,1.047),(y0-.030,1.047)]]
+        mesh('Short lower rear optical insert',points,[(0,1,2,3)],group,lamp_chrome)
     vs=[];fs=[];n=64
     for j in range(9):
         for i in range(n+1):
-            t=i/n;scale=smoothstep(0,.18,t);z=1.077+(-.032+.060*j/8)*scale
+            t=i/n;scale=smoothstep(0,.22,t);z=1.067+(-.038+.076*j/8)*scale
             x,w,_=side_surface(1.82+.48*t,z,'rear');vs.append((x,side*(w+.006),z))
     for j in range(8):
         for i in range(n):
             k=j*(n+1)+i;face=(k,k+1,k+n+2,k+n+1)
             fs.append(face if side<0 else tuple(reversed(face)))
-    mesh('Tapered side tail lamp housing',vs,fs,rear_lights,black,.003)
-    for height in [1.062,1.090]:
-        vs=[];fs=[]
-        for row in [-1,1]:
-            for i in range(n+1):
-                t=i/n;scale=smoothstep(0,.18,t);z=1.077+(height-1.077+row*.0027)*scale
-                x,w,_=side_surface(1.82+.48*t,z,'rear');vs.append((x,side*(w+.010),z))
-        for i in range(n):
-            face=(i,i+1,i+n+2,i+n+1);fs.append(face if side<0 else tuple(reversed(face)))
-        mesh('Tapered side tail light guide',vs,fs,rear_lights,red,.001)
+    mesh('Tapered side tail lamp housing',vs,fs,outer,black,.003)
+    mesh('Smoked side tail lamp cover',[(x,y+side*.002,z) for x,y,z in vs],fs,outer,rear_lens)
+    vs=[];fs=[]
+    for row in [-1,1]:
+        for i in range(n+1):
+            t=i/n;scale=smoothstep(0,.22,t);z=1.067+(-.0055+row*.003)*scale
+            x,w,_=side_surface(1.82+.48*t,z,'rear');vs.append((x,side*(w+.010),z))
+    for i in range(n):
+        face=(i,i+1,i+n+2,i+n+1);fs.append(face if side<0 else tuple(reversed(face)))
+    mesh('Single tapered side rear light guide',vs,fs,outer,rear_led,.001)
+
+# The full rear door shares the roof hinge; these narrow frames move with its glass.
+for side in [-1,1]:
+    vs=[];fs=[];n=48
+    for i in range(n+1):
+        t=i/n;inner=Vector(rear_window_point(t,side))
+        outer=inner+Vector((.008,side*(.020*(1-t)+.012*t),.002*(1-t)))
+        vs.extend([tuple(inner),tuple(outer)])
+    for i in range(n):
+        k=i*2;face=(k,k+1,k+3,k+2)
+        fs.append(face if side>0 else tuple(reversed(face)))
+    mesh('Moving tailgate glass side frame',vs,fs,tailgate,paint,.006)
+    tube('Moving rear glass inner seal',[rear_window_point(i/48,side) for i in range(49)],.004,black,tailgate)
+vs=[];fs=[];ny=48;nz=16
+for j in range(nz+1):
+    z=.684+.405*j/nz
+    for i in range(ny+1):
+        y=(i/ny*2-1)*(tailgate_width(z)-.038)
+        vs.append(rear_point(y,z,-.027))
+for j in range(nz):
+    for i in range(ny):
+        k=j*(ny+1)+i;fs.append((k,k+ny+1,k+ny+2,k+1))
+cargo_plastic=mat('Cargo moulded trim',(.012,.016,.018),0,.72)
+carpet=mat('Luggage compartment carpet',(.021,.024,.025),0,.97)
+mesh('Tailgate inner trim panel',vs,fs,tailgate,cargo_plastic,.012)
+box('Tailgate interior pull handle',(2.30,0,.723),(.035,.23,.035),black,tailgate,.011)
+
+frame=part('rear_aperture_frame','后备箱门框','body',offset=(.35,0,.16),start=.18)
+aperture=rounded_outline([(2.30,-.725,.652),(2.18,-.755,1.115),(1.808,-.678,1.50),(1.70,-.64,1.548),(1.70,.64,1.548),(1.808,.678,1.50),(2.18,.755,1.115),(2.30,.725,.652)],.045)
+aperture=[Vector((min(x,rear_surface(y,z)[0]-.040) if z<=1.14 else x,y,z)) for x,y,z in aperture]
+tube('Rear aperture folded metal flange',[(x-.015,y,z) for x,y,z in aperture],.018,paint,frame,True)
+tube('Continuous tailgate aperture seal',[(x+.003,y,z) for x,y,z in aperture],.011,rubber,frame,True)
+param_panel('Cargo loading sill',lambda s,u:(rear_surface(.72*u,.635)[0]-.040-.14*(1-s),.72*u,.648),frame,cargo_plastic,4,48,thickness=.025)
+box('Rear roof inner crossmember',(1.70,0,1.525),(.08,1.30,.045),black,frame,.012)
+cargo=part('luggage_compartment','后备箱内衬','cabin',offset=(.40,0,.40),start=.31)
+box('Carpeted luggage floor',(1.73,0,.558),(1.10,1.36,.055),carpet,cargo,.018)
+box('Luggage floor service flap',(1.75,0,.588),(.67,1.02,.008),carpet,cargo,.010)
+box('Luggage floor pull tab',(2.03,0,.594),(.055,.11,.012),black,cargo,.004)
+for side in [-1,1]:
+    box('Cargo inner side wall',(1.73,side*.681,.79),(1.05,.052,.43),cargo_plastic,cargo,.020)
+    box('Rear wheelhouse inner trim',(1.46,side*.625,.71),(.56,.17,.27),carpet,cargo,.055)
+    box('Luggage tie down recess',(2.08,side*.59,.60),(.095,.065,.018),black,cargo,.008)
+    fixed=(1.77,side*.72,1.30);moving=(2.21,side*.70,1.12)
+    length=(Vector(moving)-Vector(fixed)).length
+    strut=part(f'tailgate_strut_{side}',('左' if side>0 else '右')+'尾门电动撑杆','body',fixed,(.38,side*.14,.35),.19,'tailgate_strut')
+    strut['moving']=[moving[0],moving[2],-moving[1]]
+    strut['hinge']=[TAILGATE_HINGE[0],TAILGATE_HINGE[2],-TAILGATE_HINGE[1]]
+    strut['piston_length']=.45
+    cylinder('Tailgate actuator barrel',(fixed[0],fixed[1],fixed[2]+.225),.014,.45,black,strut,'Z',32)
+    piston=cylinder('Tailgate actuator piston',(fixed[0],fixed[1],fixed[2]+length-.225),.006,.45,alloy,strut,'Z',24);piston['strut_component']='piston'
+    tip=cylinder('Tailgate actuator upper socket',(fixed[0],fixed[1],fixed[2]+length),.015,.026,black,strut,'Z',24);tip['strut_component']='tip'
+    strut.rotation_euler=(Vector(moving)-Vector(fixed)).to_track_quat('Z','Y').to_euler()
+tube('Rear valance pressed upper contour',[rear_point(y,z,.022) for y,z in [(-.68,.335),(-.48,.432),(.48,.432),(.68,.335)]],.004,black,rear_bumper)
+for z in [.351,.389]:
+    tube('Lower valance horizontal moulding',[rear_point(y,z,.021) for y in [-.57+1.14*i/48 for i in range(49)]],.003,black,rear_bumper)
 
 # Visible cabin components are individually removable for the scroll explorer.
 dash=part('dashboard','仪表台与中控','cabin',(-.83,0,1.04),(-.2,0,.65),.3)

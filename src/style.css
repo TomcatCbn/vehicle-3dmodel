@@ -12,6 +12,8 @@
 .drive-open{min-height:35px;padding:8px 12px;border:1px solid #d3c09d66;border-radius:7px;background:#342e24eb;color:#f0d7ad;font-size:11px;white-space:nowrap}.drive-open span{margin-left:8px}.drive-open:hover:not(:disabled){background:#504432}
 .detail-open span{margin-left:8px}.detail-open:hover:not(:disabled){background:#294334;border-color:#b8ebc699}.scene-tools .drag-hint{max-width:120px;line-height:1.6}
 body.inspection-open{overflow:hidden}
+.hood-control{min-height:61px!important}.hood-control .small-button{font-size:10px;padding:7px 9px}
+.lab-section{min-height:850px}
 body.driving-open{overflow:hidden}
 #drive-dialog{width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;padding:0;border:0;inset:0;background:#11191d;color:#eef0f1;overflow:hidden}
 #drive-dialog::backdrop{background:#0c1013}
@@ -39,4 +41,14 @@ body.driving-open{overflow:hidden}
 .detail-settings{display:flex;align-items:center;justify-content:center;gap:24px;width:100%;font-size:11px;color:#bac8c6}.detail-settings label{display:flex;align-items:center;gap:8px;min-height:35px;cursor:pointer;white-space:nowrap}.detail-settings input{width:15px;height:15px;margin:0;accent-color:var(--mint)}
 .detail-zoom{display:flex;align-items:center;border:1px solid #ffffff1e;border-radius:7px;overflow:hidden}.detail-zoom button{width:39px;height:34px;background:transparent;border:0;border-right:1px solid #ffffff15;color:#cbdad4;font-size:19px}.detail-zoom button:last-child{border:0}.detail-zoom button:hover{background:#b8ebc615}.detail-settings p{font-size:10px;color:#8ca09f;margin:0;line-height:1.6}
 .detail-views{display:flex;gap:7px;max-width:590px;width:100%}.detail-views button{flex:1;min-width:0;min-height:38px;font-size:12px;border:1px solid #ffffff1b;border-radius:7px;background:#ffffff03;color:#a9b9bc}.detail-views button:hover{border-color:#b8ebc64d;color:#dcece1}.detail-views button[aria-pressed=true]{background:var(--mint);border-color:var(--mint);color:#14281d}
+.detail-views{max-width:660px}
+.control-panel{max-height:calc(100svh - 170px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:#54675f transparent}
+.tailgate-control{min-height:64px!important}.tailgate-control .control-label{font-size:11px}.gate-actions{display:flex;gap:4px}.gate-actions button{font-size:10px;padding:7px 8px;min-height:31px}
+.sunroof-control{padding-bottom:16px;border-bottom:1px solid var(--line)}.sunroof-control .control-row{min-height:61px}.sunroof-control output{font-size:16px;color:var(--mint)}
+.detail-motion{display:flex;align-items:center;justify-content:space-between;gap:20px;width:min(100%,500px);font-size:12px;color:#b9ccc1}
+.detail-motion>div:first-child{display:flex;align-items:center;gap:14px}.detail-motion output{font-size:11px;color:#8fa99c}.detail-motion .gate-actions button{padding:8px 13px;min-height:35px}
+.roof-motion label{display:flex;align-items:center;gap:12px;white-space:nowrap}.roof-motion input{max-width:290px;margin:0}
+#detail-dialog.motion-detail .detail-footer{height:176px}#detail-dialog.motion-detail #detail-stage{bottom:176px}
+@media(max-width:700px){.control-panel{max-height:none;overflow:visible}.lab-section{height:1660px}.detail-motion{font-size:11px;gap:12px}.detail-motion>div:first-child{gap:8px}.detail-motion .gate-actions{gap:3px}.detail-motion .gate-actions button{padding:7px 9px;font-size:10px}.detail-motion output{font-size:10px}.roof-motion input{max-width:205px}#detail-dialog.motion-detail .detail-footer{height:216px}#detail-dialog.motion-detail #detail-stage{bottom:216px}}
+@media(max-width:700px){.lab-section{height:1660px}.detail-settings{column-gap:14px}.detail-settings [data-hood-toggle]{min-height:34px;font-size:10px;padding:7px 9px}}
 @media(max-width:700px){.scene-tools{gap:6px}.detail-open{padding:7px 9px;font-size:10px;min-height:33px}.detail-open span{margin-left:3px}.detail-header{height:106px;padding:15px 18px;gap:10px}.detail-header h2{font-size:23px}.detail-header p{font-size:10px;max-width:210px}.detail-back{font-size:11px;padding:7px 10px;gap:12px;min-height:40px}.detail-header .eyebrow{font-size:7px;letter-spacing:1.3px}#detail-stage{inset:106px 0 156px}.detail-footer{height:156px;padding:10px 16px 16px;gap:12px}.detail-settings{flex-wrap:wrap;gap:8px 22px}.detail-settings p{flex-basis:100%;text-align:center;font-size:9px}.detail-views{gap:5px}.detail-views button{min-height:41px;font-size:11px}.detail-settings label{font-size:11px}}

@@ -47,19 +47,30 @@ blender --background --python scripts/render_aura_t6.py -- --preview --view=side
 blender --background --python scripts/render_aura_t6.py -- --preview --view=wheel
 blender --background --python scripts/render_aura_t6.py -- --preview --view=lamp
 blender --background --python scripts/render_aura_t6.py -- --preview --view=badge
+blender --background --python scripts/render_aura_t6.py -- --preview --view=hood
+blender --background --python scripts/render_aura_t6.py -- --preview --view=hood-quarter
+blender --background --python scripts/render_aura_t6.py -- --preview --view=front-photo --white
+blender --background --python scripts/render_aura_t6.py -- --preview --view=rear-photo --white
+blender --background --python scripts/render_aura_t6.py -- --preview --view=trunk
+blender --background --python scripts/render_aura_t6.py -- --preview --view=sunroof
 ```
 
 输出为同一三维模型的正交视图，以及轮毂、主灯或车标近景，保存在 `output/playwright/aura-t6-detail-*.png`，用于和多视图参考核对。
+
+`front-photo --white` 使用同一模型的白色正前透视视图核对实拍比例，不改变默认 GLB 车漆。机盖与固定前沿使用共享曲面法线；前舱检修盖与外围托盘采用不同粗糙度的黑色非金属塑料。Blender 使用程序噪声凹凸，浏览器在模型 UV 上生成可重复的微法线；直接使用裸 GLB 时不会包含浏览器生成的颗粒贴图。
 
 GLB 使用 `part`、`label`、`layer`、`offset`、`start`、`motion`、`side` 自定义元数据驱动拆解和车控。Blender 的坐标系在导出时转换为 glTF 的 Y 轴向上坐标系。
 
 ## 交互
 
 - 拖动车辆旋转；自由、侧面和俯视视角；手机双指缩放。
-- 点击「放大看细节」进入全屏三维查看，可切换前脸、车尾、车灯、车标和轮毂；拖动旋转，滚轮、双指或 ＋/− 缩放，重置按钮恢复当前部位的视角。
+- 点击「放大看细节」进入全屏三维查看，可切换前脸、前舱、车尾、天窗、车灯、车标和轮毂；拖动旋转，滚轮、双指或 ＋/− 缩放，重置按钮恢复当前部位的视角。
+- 控制台可开合「前舱盖」。选择「前舱」细节会打开机盖，展示冲压内板、隔音衬板、两根伸缩撑杆、检修盖板和蓝色加注口；在细节页可用「关闭机盖」切换闭盖检查，退出后保留该状态。前脸细节页也有机盖开合按钮。
+- 「电动后备箱」支持开启、暂停、关闭和中途反向，显示实际开度。后玻璃、中央尾灯和扰流板随尾门抬起，外侧尾灯保持固定，两侧撑杆跟随伸缩。车尾细节页也有相同控制。
+- 「电动天窗」滑杆设置目标开度，前玻璃先抬升再向后滑动，后玻璃固定；打开后能看到真实车顶开口。「天窗」细节页可边操作边查看，退出后保留开度。细节相机按完整运动范围取景，开合时不自动追随；可用 ＋ 放大。
 - 勾选「仅看所选部件」隐藏周围车身；车灯、车标和轮毂默认独立展示。按 Esc 或「返回整车」退出，恢复车控状态、相机和拆解位置。双击车身部件也可进入对应部位的近景。
 - 点击「行驶演示」，再点「起步」；目标速度可调至 0–100 km/h，支持平滑加减速、停车、重新起步以及前侧/侧面/后侧观察。轮胎与轮毂按同一累计行程旋转，路面和路边道钉反向滚动，车身保持在跟随镜头中。
-- 开门、车门尚未关拢或充电枪连接时无法起步。退出行驶会停驶并恢复整车或拆解位置；切换到后台会停车。每次进入行驶演示都会重新计算本次行程。
+- 车门、机盖或尾门打开、尚未关拢，或充电枪连接时无法起步。天窗可以保持开启。退出行驶会停驶并恢复整车或拆解位置；切换到后台会停车。每次进入行驶演示都会重新计算本次行程。
 - 四种车漆颜色，车锁、车门、四窗同步开度、空调温度、连接充电枪与充电。
 - 先解锁再开门；关门后才能上锁；插枪后才能充电。电量采用加速时间模拟。
 - 向下滚动逐步拆解车身、座舱、轮组与动力系统；向上滚动重新组装。
@@ -73,5 +84,9 @@ GLB 使用 `part`、`label`、`layer`、`offset`、`start`、`motion`、`side` �
 实时场景使用日落色背景、摄影棚 HDR、物理玻璃、软阴影和模糊地面反射。HDR 来源及 CC0 说明见 `public/environments/LICENSE.md`。现有几何仍未达到广告图的车型精度。用户提供的汽车之家环视是图片序列，只作为多角度建模参考，无法直接获得独立车门或零件模型。
 
 空调以气流和温度设定展示；车窗当前为四窗同步控制。未包含车辆物理或电池电化学模型，内部示意结构不可用于推断实车配置。
+
+前舱按用户开盖照片重建可见的检修盖板、机盖内板与固定前沿；盖板下方没有建模为发动机舱或储物箱。压筋、内衬和撑杆尺寸仍是照片近似。
+
+车尾按用户正后照片校准。天窗轨迹、尾门开合角度、撑杆和货厢为交互示意，未核实原厂尺寸或选装配置；未实现防夹策略。当前模型含 99 个独立部件。
 
 行驶为直线视觉演示，速度与行程仅在本地计算，未接入 MQTT / BLE，不包含转向、碰撞、真实能耗或车辆动力学。手机布局已通过浏览器 390×844 视口检查，双指操作仍需实体手机验证。

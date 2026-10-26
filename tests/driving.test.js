@@ -57,3 +57,13 @@ test('an open or still closing bonnet prevents starting',()=>{
   vehicle.hoodAngle=0;
   assert.equal(setDriving(drive,vehicle,true),true);
 });
+
+test('tailgate must be fully closed before driving, while an open sunroof is allowed',()=>{
+  const drive=createDriveState(),vehicle=createState();
+  vehicle.tailgateTarget=1;
+  assert.equal(setDriving(drive,vehicle,true),false);
+  vehicle.tailgateTarget=0;vehicle.tailgatePosition=.3;
+  assert.equal(setDriving(drive,vehicle,true),false);
+  vehicle.tailgatePosition=0;vehicle.sunroofTarget=1;vehicle.sunroofPosition=1;
+  assert.equal(setDriving(drive,vehicle,true),true);
+});

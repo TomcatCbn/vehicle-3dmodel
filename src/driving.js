@@ -39,8 +39,8 @@ export function createDriving({canvas,camera,controls,scene,getState,resize,onEn
     document.querySelector('#drive-speed').textContent=Math.round(drive.speed);
     document.querySelector('#drive-distance').textContent=(drive.distance/1000).toFixed(2);
     document.querySelector('#drive-target').textContent=drive.targetSpeed;
-    const vehicle=getState(),blocked=vehicle.doorsOpen||vehicle.doorAngle>.01||vehicle.plugged;
-    document.querySelector('#drive-status').textContent=drive.running?(drive.speed<drive.targetSpeed-.5?'正在加速':drive.speed>drive.targetSpeed+.5?'正在减速':'行驶中'):drive.speed>.1?'正在停车':blocked?'请先关门并拔枪':'已停稳';
+    const vehicle=getState(),blocked=vehicle.doorsOpen||vehicle.doorAngle>.01||vehicle.hoodOpen||vehicle.hoodAngle>.01||vehicle.tailgateTarget>.001||vehicle.tailgatePosition>.001||vehicle.plugged;
+    document.querySelector('#drive-status').textContent=drive.running?(drive.speed<drive.targetSpeed-.5?'正在加速':drive.speed>drive.targetSpeed+.5?'正在减速':'行驶中'):drive.speed>.1?'正在停车':blocked?'请关好车门、机盖、尾门并拔枪':'已停稳';
     toggle.textContent=drive.running?'停车':'起步';toggle.setAttribute('aria-pressed',String(drive.running));
     range.style.setProperty('--range-progress',`${drive.targetSpeed}%`);
   }
@@ -52,7 +52,7 @@ export function createDriving({canvas,camera,controls,scene,getState,resize,onEn
     flushOrbit();controls.target.copy(target);camera.position.copy(target).add(direction);controls.update();
   }
   function startStop(){
-    if(!setDriving(drive,getState(),!drive.running)){toast('请先关闭车门并拔出充电枪，再起步');document.querySelector('#drive-status').textContent='请先关门并拔枪';return;}
+    if(!setDriving(drive,getState(),!drive.running)){toast('请先关好车门、机盖和尾门，并拔出充电枪，再起步');return;}
     sync();
   }
   const open=event=>{

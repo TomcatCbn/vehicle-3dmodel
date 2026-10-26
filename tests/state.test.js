@@ -45,3 +45,18 @@ test('bonnet opens and closes progressively without overshooting its requested p
   assert.ok(state.hoodAngle>0&&state.hoodAngle<1);
   stepVehicle(state,10);assert.equal(state.hoodAngle,0);
 });
+
+test('sunroof and power tailgate move progressively, reverse, stop midway and respect limits',()=>{
+  const state=createState();
+  for(const [position,target] of [['sunroofPosition','sunroofTarget'],['tailgatePosition','tailgateTarget']]){
+    assert.equal(state[position],0);assert.equal(state[target],0);
+    state[target]=1;stepVehicle(state,.5);
+    assert.ok(state[position]>0&&state[position]<1);
+    state[target]=state[position];const paused=state[position];
+    stepVehicle(state,2);assert.equal(state[position],paused);
+    state[target]=0;stepVehicle(state,.1);assert.ok(state[position]<paused);
+    stepVehicle(state,10);assert.equal(state[position],0);
+    state[target]=2;stepVehicle(state,10);assert.equal(state[position],1);
+    state[target]=-1;stepVehicle(state,10);assert.equal(state[position],0);
+  }
+});

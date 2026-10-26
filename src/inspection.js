@@ -1,16 +1,20 @@
 import * as THREE from 'three';
 
 export const INSPECTION_VIEWS=[
-  {id:'front',label:'前脸',description:'机盖、前围与分体灯组',direction:[-1,.16,.22]},
-  {id:'rear',label:'车尾',description:'尾门、后肩线与下包围',direction:[1,.18,.42]},
+  {id:'front',label:'前脸',description:'机盖、前围与分体灯组',direction:[-1,.16,0]},
+  {id:'hood',label:'前舱',description:'冲压内板、隔音衬板与检修盖板',direction:[-1,.45,.18]},
+  {id:'rear',label:'车尾',description:'尾灯、后备箱与电动尾门',direction:[1,.18,.18]},
+  {id:'roof',label:'天窗',description:'前活动玻璃、固定玻璃与滑轨',direction:[-.25,1,.45]},
   {id:'lamp',label:'车灯',description:'右侧主灯的透镜与反射饰板',direction:[-1,.05,.35],isolated:true},
   {id:'badge',label:'车标',description:'前车标的字面、外环与底座',direction:[-1,.27,.03],isolated:true},
   {id:'wheel',label:'轮毂',description:'右前轮毂、轮胎与制动结构',direction:[.10,.10,1],isolated:true},
 ];
 export function getInspectionMeshes(vehicle,id){
   const names={
-    front:['前保险杠','前舱盖','前贯穿灯带','左纵向方灯','右纵向方灯','左前翼子板','右前翼子板'],
-    rear:['尾门','后保险杠','后贯穿尾灯','后挡风玻璃','后扰流板','左后翼子板','右后翼子板','左后侧围','右后侧围'],
+    front:['前保险杠','前舱盖','前贯穿灯带','左纵向方灯','右纵向方灯','左前翼子板','右前翼子板','前挡风玻璃'],
+    hood:['前舱盖','前舱检修盖板','左机盖撑杆','右机盖撑杆'],
+    rear:['尾门','后保险杠','后贯穿尾灯','后挡风玻璃','后扰流板','左外侧尾灯','右外侧尾灯','后备箱门框','后备箱内衬','左尾门电动撑杆','右尾门电动撑杆','左后翼子板','右后翼子板','左后侧围','右后侧围'],
+    roof:['电动天窗','全景玻璃车顶','左行李架','右行李架','左侧顶梁','右侧顶梁'],
     lamp:['右纵向方灯'],badge:['前保险杠'],wheel:['右前轮毂','右前轮胎','右前制动盘'],
   };
   if(!names[id])throw new RangeError('Unknown inspection view');
@@ -42,7 +46,17 @@ export function isolateMeshes(root,meshes){
   return ()=>{for(const [node,visible] of saved)node.visible=visible;};
 }
 
-export function createInspection({canvas,camera,controls,vehicle,resize,onEnter,onExit,onIsolate}){
+export function getInspectionBounds(vehicle,id,state){
+  const meshes=getInspectionMeshes(vehicle,id),box=new THREE.Box3(),motor=id==='rear'?'tailgatePosition':id==='roof'?'sunroofPosition':null;
+  for(const value of motor?[0,.15,.35,.55,.75,1]:[0]){
+    vehicle.update(motor?{...state,[motor]:value}:state,0);vehicle.root.updateMatrixWorld(true);
+    for(const mesh of meshes)box.union(new THREE.Box3().setFromObject(mesh));
+  }
+  vehicle.update(state,0);vehicle.root.updateMatrixWorld(true);
+  return motor?box.expandByScalar(.04):box;
+}
+
+export function createInspection({canvas,camera,controls,vehicle,resize,onEnter,onExit,onIsolate,getState,onSelect=()=>{}}){
   const dialog=document.querySelector('#detail-dialog'),stage=document.querySelector('#detail-stage');
   const isolate=document.querySelector('#detail-isolate'),nav=document.querySelector('#detail-views');
   const home=canvas.parentNode,next=canvas.nextSibling;
@@ -61,16 +75,22 @@ export function createInspection({canvas,camera,controls,vehicle,resize,onEnter,
     controls.maxPolarAngle=isolate.checked?Math.PI-.04:Math.PI/2-.03;
     onIsolate(isolate.checked,box);
   }
+  function updateBox(){
+    box=getInspectionBounds(vehicle,current,getState());
+  }
   function select(id){
     restoreVisibility();restoreVisibility=()=>{};current=id;
     const view=INSPECTION_VIEWS.find(view=>view.id===id);
-    selected=getInspectionMeshes(vehicle,id);vehicle.root.updateMatrixWorld(true);box=new THREE.Box3();
-    for(const mesh of selected)box.union(new THREE.Box3().setFromObject(mesh));
+    onSelect(id);selected=getInspectionMeshes(vehicle,id);updateBox();
     document.querySelector('#detail-title').textContent=view.label;
     document.querySelector('#detail-description').textContent=view.description;
     canvas.setAttribute('aria-label',`可旋转缩放的${view.label}三维细节`);
     for(const button of nav.querySelectorAll('button'))button.setAttribute('aria-pressed',String(button.dataset.detailView===id));
-    isolate.checked=Boolean(view.isolated);visibility();fit();
+    document.querySelector('#detail-dialog [data-hood-toggle]').hidden=!['front','hood'].includes(id);
+    const motion=['rear','roof'].includes(id),layoutChanged=dialog.classList.contains('motion-detail')!==motion;
+    dialog.classList.toggle('motion-detail',motion);
+    for(const node of dialog.querySelectorAll('[data-motion-view]'))node.hidden=node.dataset.motionView!==id;
+    isolate.checked=Boolean(view.isolated);visibility();fit();if(layoutChanged)resize();
   }
   function open(id='rear',trigger=document.activeElement){
     if(active){select(id);return;}
@@ -113,7 +133,7 @@ export function createInspection({canvas,camera,controls,vehicle,resize,onEnter,
       event.preventDefault();if(event.key==='-')zoom(1.25);else if(event.key.toLowerCase()==='r')fit();else zoom(.8);
     }
   });
-  return {get active(){return active;},stage,open,
+  return {get active(){return active;},stage,open,refresh(){if(active){updateBox();visibility();fit();}},
     refit(){
       if(!box)return;
       const view=INSPECTION_VIEWS.find(view=>view.id===current),pose=fitInspectionView(box,view.direction,camera.aspect,camera.fov);
