@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createDriveState, setDriving, stepDrive } from '../src/drive-state.js';
+import { createDriveState, isBraking, maxDriveSpeed, setDirection, setDriving, signedTargetSpeed, stepDrive } from '../src/drive-state.js';
 import { createState } from '../src/state.js';
 
 test('driving accelerates smoothly to the chosen speed and integrates distance in metres',()=>{
@@ -66,4 +66,75 @@ test('tailgate must be fully closed before driving, while an open sunroof is all
   assert.equal(setDriving(drive,vehicle,true),false);
   vehicle.tailgatePosition=0;vehicle.sunroofTarget=1;vehicle.sunroofPosition=1;
   assert.equal(setDriving(drive,vehicle,true),true);
+});
+
+test('direction changes require standstill and reverse clamps speed, distance, and braking',()=>{
+  const drive=createDriveState(),vehicle=createState();
+  assert.equal(drive.direction,1);
+  assert.equal(maxDriveSpeed(drive),100);
+  assert.equal(signedTargetSpeed(drive),0);
+  setDriving(drive,vehicle,true);stepDrive(drive,1);
+  assert.equal(setDirection(drive,-1),false);
+  assert.equal(drive.direction,1);
+  setDriving(drive,vehicle,false);stepDrive(drive,20);
+  assert.equal(drive.speed,0);
+  assert.equal(isBraking(drive),false);
+  drive.targetSpeed=100;
+  assert.equal(setDirection(drive,0),false);
+  assert.equal(drive.direction,1);
+  assert.equal(drive.targetSpeed,100);
+  assert.equal(setDirection(drive,-1),true);
+  assert.equal(drive.direction,-1);
+  assert.equal(drive.targetSpeed,20);
+  assert.equal(maxDriveSpeed(drive),20);
+  drive.targetSpeed=100;
+  setDriving(drive,vehicle,true);
+  assert.equal(signedTargetSpeed(drive),-20);
+  stepDrive(drive,20);
+  assert.equal(drive.speed,-20);
+  assert.ok(drive.distance<0);
+  setDriving(drive,vehicle,false);
+  assert.equal(isBraking(drive),true);
+  stepDrive(drive,20);
+  assert.equal(drive.speed,0);
+  assert.equal(isBraking(drive),false);
+});
+
+test('reverse accelerates negatively and brakes to a standstill without overshooting',()=>{
+  const drive=createDriveState(),vehicle=createState();
+  assert.equal(setDirection(drive,-1),true);
+  setDriving(drive,vehicle,true);drive.targetSpeed=20;
+  stepDrive(drive,1);
+  assert.equal(drive.speed,-10);
+  drive.targetSpeed=0;stepDrive(drive,.25);
+  assert.equal(drive.speed,-4);
+  stepDrive(drive,1);
+  assert.equal(drive.speed,0);
+});
+
+test('constant speed is not braking, while requested deceleration is braking until settled',()=>{
+  const drive=createDriveState(),vehicle=createState();
+  setDriving(drive,vehicle,true);stepDrive(drive,20);
+  assert.equal(drive.speed,40);
+  assert.equal(isBraking(drive),false);
+  drive.targetSpeed=10;
+  assert.equal(isBraking(drive),true);
+  stepDrive(drive,20);
+  assert.equal(drive.speed,10);
+  assert.equal(isBraking(drive),false);
+  drive.targetSpeed=Infinity;
+  assert.equal(signedTargetSpeed(drive),0);
+});
+
+test('direction changes preserve non-finite targets and their zero motion target',()=>{
+  for(const targetSpeed of [Infinity,NaN]){
+    const drive=createDriveState();
+    drive.targetSpeed=targetSpeed;
+    assert.equal(setDirection(drive,-1),true);
+    assert.equal(drive.targetSpeed,targetSpeed);
+    setDriving(drive,createState(),true);
+    assert.equal(signedTargetSpeed(drive),0);
+    stepDrive(drive,1);
+    assert.equal(drive.speed,0);
+  }
 });

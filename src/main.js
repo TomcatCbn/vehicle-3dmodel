@@ -9,8 +9,9 @@ import { createState, stepVehicle, setCharging, clamp } from './state.js';
 import './style.css';
 
 const $ = selector => document.querySelector(selector);
-const icons={lock:'<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/>',door:'<path d="M5 21V8l5-5h9v18H5Z"/><path d="M8 10V8l3-3h5v5H8Zm6 5h2"/>',window:'<path d="M4 18V8l4-4h12v14H4Zm0-6h16M8 4v8m-6 9h20"/>',wind:'<path d="M3 8h12a3 3 0 1 0-3-3M2 12h17a3 3 0 1 1-3 3M4 16h6a3 3 0 1 1-3 3"/>',battery:'<rect x="3" y="6" width="17" height="12" rx="2"/><path d="M22 10v4M7 10v4m4-4v4m4-4v4"/>'};
+const icons={lock:'<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/>',door:'<path d="M5 21V8l5-5h9v18H5Z"/><path d="M8 10V8l3-3h5v5H8Zm6 5h2"/>',window:'<path d="M4 18V8l4-4h12v14H4Zm0-6h16M8 4v8m-6 9h20"/>',wind:'<path d="M3 8h12a3 3 0 1 0-3-3M2 12h17a3 3 0 1 1-3 3M4 16h6a3 3 0 1 1-3 3"/>',battery:'<rect x="3" y="6" width="17" height="12" rx="2"/><path d="M22 10v4M7 10v4m4-4v4m4-4v4"/>',light:'<path d="M4 7h8v10H4zM15 8l5-3m-5 7h6m-6 4 5 3"/>',tail:'<path d="M5 5h10l4 4v6l-4 4H5zM9 9h6l2 3-2 3H9z"/>',ambient:'<path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1m-8.6 8.6-2.1 2.1"/><circle cx="12" cy="12" r="3"/>'};
 for(const node of document.querySelectorAll('[data-icon]'))node.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[node.dataset.icon]}</svg>`;
+const headlightLabels={off:'关闭',low:'近光',high:'远光'};
 let state=createState();
 let toastTimer;
 function toast(message){$('#toast').textContent=message;$('#toast').classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').classList.remove('visible'),2400);}
@@ -32,6 +33,12 @@ function syncControls(){
   for(const button of document.querySelectorAll('[data-hood-toggle]')){
     button.textContent=state.hoodOpen?'关闭机盖':'打开机盖';button.setAttribute('aria-pressed',String(state.hoodOpen));
   }
+  $('#headlight-status').textContent=headlightLabels[state.lighting.headlights];
+  $('#headlight-toggle').textContent=headlightLabels[state.lighting.headlights];
+  $('#headlight-toggle').setAttribute('aria-label',`前大灯，当前${headlightLabels[state.lighting.headlights]}，点击切换`);
+  $('#tail-toggle').setAttribute('aria-checked',String(state.lighting.tailLights));
+  $('#tail-status').textContent=state.lighting.tailLights?'已开启':'已关闭';
+  for(const button of document.querySelectorAll('[data-ambient]'))button.setAttribute('aria-pressed',String(button.dataset.ambient===state.lighting.ambient));
   $('#ac-toggle').setAttribute('aria-checked',String(state.ac));$('#ac-status').textContent=state.ac?'运行中':'已关闭';$('#temperature').textContent=state.temperature;
   $('#window-value').innerHTML=`${Math.round(state.windowOpen*100)}<span>%</span>`;
   $('#battery-value').textContent=Math.floor(state.battery);$('#battery-fill').style.width=`${state.battery}%`;
@@ -50,6 +57,12 @@ for(const range of document.querySelectorAll('[data-sunroof-range]'))range.addEv
 for(const button of document.querySelectorAll('[data-tailgate-action]'))button.addEventListener('click',()=>{
   state.tailgateTarget=button.dataset.tailgateAction==='open'?1:button.dataset.tailgateAction==='close'?0:state.tailgatePosition;syncControls();
 });
+$('#headlight-toggle').addEventListener('click',()=>{
+  const modes=['off','low','high'],index=modes.indexOf(state.lighting.headlights);
+  state.lighting.headlights=modes[(index+1)%modes.length];syncControls();
+});
+$('#tail-toggle').addEventListener('click',()=>{state.lighting.tailLights=!state.lighting.tailLights;syncControls();});
+for(const button of document.querySelectorAll('[data-ambient]'))button.addEventListener('click',()=>{state.lighting.ambient=button.dataset.ambient;syncControls();});
 syncControls();
 
 startScene().catch(error => { $('#webgl-error').hidden=false; $('#webgl-error').textContent='模型暂时无法加载，请检查本地模型文件与浏览器 WebGL 支持后刷新。'; $('.telemetry>span:first-child').textContent='模型加载失败'; $('.live-indicator').textContent='场景不可用'; console.error(error); });
@@ -147,7 +160,8 @@ async function startScene(){
     vehicle.root.rotation.y=!focused&&exploring?progress*.2:0;
     const visibleProgress=focused?0:progress;
     studio.update(visibleProgress);
-    vehicle.update(state,visibleProgress,!focused&&exploring?layer:'all',driving.update(dt));controls.update();renderer.render(scene,camera);
+    const motion=driving.update(dt);
+    vehicle.update(state,visibleProgress,!focused&&exploring?layer:'all',motion);controls.update();renderer.render(scene,camera);
     if(clock.elapsedTime-lastUi>.1){syncControls();$('#explosion-value').textContent=`${Math.round(progress*100)}%`;$('#explosion-fill').style.width=`${progress*100}%`;lastUi=clock.elapsedTime;}
     requestAnimationFrame(frame);
   }

@@ -52,3 +52,26 @@ body.driving-open{overflow:hidden}
 @media(max-width:700px){.control-panel{max-height:none;overflow:visible}.lab-section{height:1660px}.detail-motion{font-size:11px;gap:12px}.detail-motion>div:first-child{gap:8px}.detail-motion .gate-actions{gap:3px}.detail-motion .gate-actions button{padding:7px 9px;font-size:10px}.detail-motion output{font-size:10px}.roof-motion input{max-width:205px}#detail-dialog.motion-detail .detail-footer{height:216px}#detail-dialog.motion-detail #detail-stage{bottom:216px}}
 @media(max-width:700px){.lab-section{height:1660px}.detail-settings{column-gap:14px}.detail-settings [data-hood-toggle]{min-height:34px;font-size:10px;padding:7px 9px}}
 @media(max-width:700px){.scene-tools{gap:6px}.detail-open{padding:7px 9px;font-size:10px;min-height:33px}.detail-open span{margin-left:3px}.detail-header{height:106px;padding:15px 18px;gap:10px}.detail-header h2{font-size:23px}.detail-header p{font-size:10px;max-width:210px}.detail-back{font-size:11px;padding:7px 10px;gap:12px;min-height:40px}.detail-header .eyebrow{font-size:7px;letter-spacing:1.3px}#detail-stage{inset:106px 0 156px}.detail-footer{height:156px;padding:10px 16px 16px;gap:12px}.detail-settings{flex-wrap:wrap;gap:8px 22px}.detail-settings p{flex-basis:100%;text-align:center;font-size:9px}.detail-views{gap:5px}.detail-views button{min-height:41px;font-size:11px}.detail-settings label{font-size:11px}}
+.ambient-presets{display:grid;grid-template-columns:repeat(2,1fr);gap:4px;min-width:112px}
+.ambient-presets button,.drive-direction button{border:1px solid #ffffff1c;background:#ffffff05;color:#b8c5c4;border-radius:5px;padding:6px 8px;font-size:10px;min-height:30px}
+.ambient-presets button[aria-pressed=true],.drive-direction button[aria-pressed=true]{background:var(--mint);border-color:var(--mint);color:#183625}
+.ambient-presets button:disabled,.drive-direction button:disabled{opacity:.32;cursor:not-allowed}
+.ambient-control{align-items:flex-start;padding:10px 0;gap:8px;min-height:64px}
+.drive-speed-heading{align-self:center;width:100%}
+.drive-speed-title{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:17px}
+.drive-speed-title label{font-size:11px;display:flex;align-items:baseline;color:#abbdb8;gap:7px}
+.drive-speed-title output{color:#dfeade;font-size:21px}
+.drive-speed-title label>span{font-size:10px;color:#839b92}
+.drive-direction{display:flex;gap:4px;flex-shrink:0}
+.drive-direction button{padding:5px 10px;min-height:29px;white-space:nowrap}
+#drive-range{margin-bottom:9px}
+@media(max-width:700px){
+  .ambient-control{flex-wrap:wrap;padding:10px 0}
+  .ambient-control .control-label{flex:1}
+  .ambient-presets{grid-template-columns:repeat(4,1fr);flex-basis:100%;margin-left:37px}
+  .ambient-presets button{min-height:36px}
+  .drive-speed-title{gap:8px;margin-bottom:13px}
+  .drive-direction button{padding:5px 8px;font-size:9px}
+  .drive-speed-title output{font-size:18px}
+  .lab-section{height:1880px}
+}
