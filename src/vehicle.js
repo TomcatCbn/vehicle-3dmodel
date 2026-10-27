@@ -61,7 +61,7 @@ export function createVehicle(root) {
         child.castShadow = false;
         child.receiveShadow = false;
       }
-      if (material.name.startsWith('Paint')) paintMaterials.push(material);
+      if (material.name.startsWith('Paint')) paintMaterials.push({material,shade:material.name==='Paint handle cup'?.32:1});
       if (material.name.includes('LED')) lights.push({material, intensity:material.emissiveIntensity});
       meshes.push({mesh:child, opacity:material.opacity, transparent:material.transparent, depthWrite:material.depthWrite});
     });
@@ -125,6 +125,6 @@ export function createVehicle(root) {
     for (const {material,intensity} of lights) material.emissiveIntensity = state.lights ? intensity : .05;
     lastLayer = layer;
   }
-  function setColor(color) { for (const material of paintMaterials) material.color.set(color); }
+  function setColor(color) { for (const {material,shade} of paintMaterials) material.color.set(color).multiplyScalar(shade); }
   return {root,parts,update,setColor};
 }

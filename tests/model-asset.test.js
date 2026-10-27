@@ -64,6 +64,75 @@ test('closed rear corners hide the cargo sill and aperture seal behind the paint
   }
 });
 
+test('front display plate is centred above the intake with a close-fitting plinth and camera above it',async()=>{
+  const vehicle=createVehicle((await loadModel()).scene);
+  vehicle.update(createState(),0);vehicle.root.updateMatrixWorld(true);
+  const front=vehicle.parts.find(part=>part.name==='前保险杠'),meshes=[];
+  front.traverse(node=>{if(node.isMesh)meshes.push(node);});
+  const box=name=>{
+    const mesh=meshes.find(mesh=>mesh.name===name);assert.ok(mesh,name);
+    return new THREE.Box3().setFromObject(mesh);
+  };
+  const plate=box('Front_license_plate'),plinth=box('Front_plate_mounting_plinth'),camera=box('Front_camera_bezel');
+  const size=plate.getSize(new THREE.Vector3()),centre=plate.getCenter(new THREE.Vector3());
+  assert.ok(size.z>.43&&size.z<.45&&size.y>.14&&size.y<.15);
+  assert.ok(Math.abs(centre.z)<1e-5&&centre.y>.63&&centre.y<.65);
+  assert.ok(camera.min.y>plate.max.y+.035&&Math.abs(camera.getCenter(new THREE.Vector3()).z)<1e-5);
+  assert.ok(plinth.min.y>=plate.min.y-.010&&plinth.max.y<=plate.max.y+.010);
+  assert.ok(!meshes.some(mesh=>mesh.name==='Lower_central_plate_support'),'plate bracket must not hang into the intake');
+});
+
+test('model plates use neutral black-and-white lettering without advertising meshes or materials',async()=>{
+  const vehicle=createVehicle((await loadModel()).scene),names=[];
+  let plates=0;
+  vehicle.root.traverse(node=>{
+    names.push(node.name);
+    if(!node.isMesh)return;
+    names.push(node.material.name);
+    if(node.name==='Front_license_plate'||node.name==='Rear_license_plate'){
+      plates++;assert.equal(node.material.name,'Model plate matte black');
+      assert.ok(Math.max(node.material.color.r,node.material.color.g,node.material.color.b)<.02);
+    }
+  });
+  assert.equal(plates,2);
+  assert.ok(!names.some(name=>/汽车之家|看车|买车|Front display plate/.test(name)));
+  assert.ok(names.filter(name=>name.startsWith('Badge_IDAURA_T6')).length>=2);
+});
+
+test('each handle opens into a recessed finger cup and its flap follows the door hinge',async()=>{
+  const vehicle=createVehicle((await loadModel()).scene),state=createState();
+  vehicle.update(state,0);vehicle.root.updateMatrixWorld(true);
+  const before=[];
+  for(const door of vehicle.parts.filter(part=>part.userData.motion==='door')){
+    const detail=[];door.traverse(node=>{if(node.isMesh&&node.userData.detail==='handle')detail.push(node);});
+    assert.ok(detail.length>=5,door.name);
+    const flap=detail.find(node=>node.name.startsWith('Handle_flush_upper_flap'));
+    assert.ok(flap);
+    const box=new THREE.Box3().setFromObject(flap),center=box.getCenter(new THREE.Vector3()),side=Math.sign(door.userData.base.z);
+    const ray=new THREE.Raycaster(new THREE.Vector3(center.x,.964,side*1.3),new THREE.Vector3(0,0,-side));
+    const hit=ray.intersectObject(vehicle.root,true)[0];
+    assert.equal(hit?.object.userData.detail,'handle',door.name+' has a real opening in the skin');
+    assert.ok(/^Handle_(recessed_cup|pocket_back_liner)/.test(hit.object.name));
+    assert.ok((center.z-hit.point.z)*side>.02,door.name+' cup lies behind the flush flap');
+    const vertex=new THREE.Vector3().fromBufferAttribute(flap.geometry.attributes.position,0).applyMatrix4(flap.matrixWorld);
+    before.push({door,flap,vertex});
+  }
+  state.doorAngle=1;vehicle.update(state,0);vehicle.root.updateMatrixWorld(true);
+  for(const {door,flap,vertex} of before){
+    const open=new THREE.Vector3().fromBufferAttribute(flap.geometry.attributes.position,0).applyMatrix4(flap.matrixWorld);
+    assert.ok(open.distanceTo(vertex)>.1);
+    assert.ok(Math.abs(open.distanceTo(door.userData.base)-vertex.distanceTo(door.userData.base))<1e-5);
+  }
+  vehicle.setColor('#b7c3cb');
+  const silver=new THREE.Color('#b7c3cb');
+  vehicle.root.traverse(mesh=>{
+    if(!mesh.isMesh||mesh.material.name!=='Paint handle cup')return;
+    const color=mesh.material.color;
+    assert.ok(color.b>color.r&&color.g>color.r,'cup follows the silver body colour');
+    assert.ok(color.r<silver.r*.5&&color.g<silver.g*.5&&color.b<silver.b*.5,'cup retains its darker recessed finish');
+  });
+});
+
 test('moving glass meets the painted door shoulder rather than floating outside it', async () => {
   const vehicle = createVehicle((await loadModel()).scene);
   vehicle.root.updateMatrixWorld(true);
@@ -99,6 +168,55 @@ test('each wheel contains a deep rim barrel instead of a flat opaque wheel cap',
   for(const rim of rims) {
     const depth=new THREE.Box3().setFromObject(rim).getSize(new THREE.Vector3()).z;
     assert.ok(depth>.18 && depth<.30,`${rim.name} has ${depth.toFixed(3)} m axial depth`);
+  }
+});
+
+test('wheel cavities keep the upper arch liner but have no flat sheet across the wheel opening',async()=>{
+  const vehicle=createVehicle((await loadModel()).scene);
+  vehicle.update(createState(),0);vehicle.root.updateMatrixWorld(true);
+  for(const label of ['右前翼子板','左前翼子板','右后翼子板','左后翼子板']){
+    const fender=vehicle.parts.find(part=>part.name===label),side=label.startsWith('右')?1:-1,x=label.includes('前')?-1.418:1.418;
+    const ray=new THREE.Raycaster(new THREE.Vector3(x+.10,.18,side*2),new THREE.Vector3(0,0,-side));
+    assert.equal(ray.intersectObject(fender,true).length,0,label+' must not contain a full circular backing sheet');
+    const liner=fender.children.find(node=>node.name.startsWith('Wheel_well_tunnel'));
+    assert.ok(liner,'upper curved wheel-well liner is retained');
+    assert.equal(liner.material.metalness,0);
+    assert.ok(liner.material.roughness>.8);
+    const upperRay=new THREE.Raycaster(new THREE.Vector3(x,.755,side*2),new THREE.Vector3(0,0,-side));
+    const hit=upperRay.intersectObject(fender,true)[0];
+    assert.equal(hit?.object.material.name,'Wheel well liner','upper tire-to-arch gap must still have a curved inner backing');
+  }
+});
+
+test('five rim windows remain physically open after adding the aero inserts',async()=>{
+  const vehicle=createVehicle((await loadModel()).scene);
+  vehicle.update(createState(),0);vehicle.root.updateMatrixWorld(true);
+  const rim=vehicle.parts.find(part=>part.name==='右前轮毂');
+  for(let i=0;i<5;i++){
+    const angle=i/5*Math.PI*2+Math.PI/2,r=.21*1.12;
+    const ray=new THREE.Raycaster(new THREE.Vector3(-1.418+r*Math.cos(angle),.37+r*Math.sin(angle),1.5),new THREE.Vector3(0,0,-1));
+    assert.equal(ray.intersectObject(rim,true).length,0,'rim window '+i+' must not become a solid cover');
+  }
+});
+
+test('the roof sensor stays on the fixed header clear of the full sliding glass travel',async()=>{
+  const vehicle=createVehicle((await loadModel()).scene),state=createState();
+  const sensor=vehicle.parts.find(part=>part.name==='车顶激光雷达'),sunroof=vehicle.parts.find(part=>part.name==='电动天窗');
+  for(let i=0;i<=10;i++){
+    state.sunroofPosition=i/10;vehicle.update(state,0);vehicle.root.updateMatrixWorld(true);
+    const a=new THREE.Box3().setFromObject(sensor),b=new THREE.Box3().setFromObject(sunroof);
+    assert.ok(a.max.x<b.min.x-.005,'fixed sensor must stay forward of the moving glass');
+  }
+});
+
+test('mirror camera retaining rings lie flush on the underside rather than hanging vertically',async()=>{
+  const vehicle=createVehicle((await loadModel()).scene);
+  vehicle.update(createState(),0);vehicle.root.updateMatrixWorld(true);
+  for(const part of vehicle.parts.filter(part=>part.name.endsWith('后视镜'))){
+    const bezel=part.children.find(node=>node.name.startsWith('Mirror_underside_camera_bezel'));
+    assert.ok(bezel);
+    const size=new THREE.Box3().setFromObject(bezel).getSize(new THREE.Vector3());
+    assert.ok(size.y<.003&&size.x>.017&&size.z>.017,'camera bezel must lie horizontally beneath the shell');
   }
 });
 

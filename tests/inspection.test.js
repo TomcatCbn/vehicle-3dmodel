@@ -16,13 +16,21 @@ function bounds(meshes){const box=new THREE.Box3();for(const mesh of meshes)box.
 
 test('detail selections find real exterior assemblies, and the badge excludes the surrounding bumper',async()=>{
   const vehicle=await model();
-  for(const key of ['front','hood','rear','roof','lamp','badge','wheel'])assert.ok(getInspectionMeshes(vehicle,key).length>0,key);
+  for(const view of INSPECTION_VIEWS)assert.ok(getInspectionMeshes(vehicle,view.id).length>0,view.id);
+  const handles=getInspectionMeshes(vehicle,'handle');
+  assert.ok(handles.every(mesh=>mesh.userData.detail==='handle'));
+  const handleSize=bounds(handles).getSize(new THREE.Vector3());
+  assert.ok(handleSize.x>.21&&handleSize.x<.25&&handleSize.y<.10);
   const badge=getInspectionMeshes(vehicle,'badge');
   assert.ok(badge.every(mesh=>mesh.material.name.startsWith('VW ')));
   const size=bounds(badge).getSize(new THREE.Vector3());
   assert.ok(size.y>.12&&size.y<.18);
   assert.ok(size.z>.12&&size.z<.18);
   assert.ok(bounds(getInspectionMeshes(vehicle,'wheel')).getSize(new THREE.Vector3()).y>.70);
+  for(const [id,label] of [['mirror','右后视镜'],['sensor','右前侧饰条'],['roof-sensor','车顶激光雷达'],['tire','右前轮胎']]){
+    const selected=getInspectionMeshes(vehicle,id),part=vehicle.parts.find(part=>part.name===label);
+    assert.ok(selected.every(mesh=>{let node=mesh;while(node&&node!==part)node=node.parent;return node===part;}),id+' must only select its own assembly');
+  }
 });
 
 test('electric motion camera bounds cover intermediate poses and preserve the current motor state',async()=>{

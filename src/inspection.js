@@ -5,23 +5,30 @@ export const INSPECTION_VIEWS=[
   {id:'hood',label:'前舱',description:'冲压内板、隔音衬板与检修盖板',direction:[-1,.45,.18]},
   {id:'rear',label:'车尾',description:'尾灯、后备箱与电动尾门',direction:[1,.18,.18]},
   {id:'roof',label:'天窗',description:'前活动玻璃、固定玻璃与滑轨',direction:[-.25,1,.45]},
+  {id:'handle',label:'门把手',description:'齐平上盖、内凹握槽与触控标记',direction:[.15,.12,1]},
   {id:'lamp',label:'车灯',description:'右侧主灯的透镜与反射饰板',direction:[-1,.05,.35],isolated:true},
   {id:'badge',label:'车标',description:'前车标的字面、外环与底座',direction:[-1,.27,.03],isolated:true},
   {id:'wheel',label:'轮毂',description:'右前轮毂、轮胎与制动结构',direction:[.10,.10,1],isolated:true},
+  {id:'mirror',label:'后视镜',description:'曲面上下壳、细棱灯条与底部镜头',direction:[-.65,.22,1]},
+  {id:'sensor',label:'翼子板感知',description:'楔形壳体、凹槽与镜头细节',direction:[-.15,.18,1]},
+  {id:'roof-sensor',label:'车顶感知',description:'低矮曲面外壳与前侧光学窗口',direction:[-1,.65,.65]},
+  {id:'tire',label:'轮胎',description:'圆润胎肩、胎侧字样、模压细纹与胎面',direction:[.1,.12,1],isolated:true},
 ];
 export function getInspectionMeshes(vehicle,id){
   const names={
     front:['前保险杠','前舱盖','前贯穿灯带','左纵向方灯','右纵向方灯','左前翼子板','右前翼子板','前挡风玻璃'],
     hood:['前舱盖','前舱检修盖板','左机盖撑杆','右机盖撑杆'],
     rear:['尾门','后保险杠','后贯穿尾灯','后挡风玻璃','后扰流板','左外侧尾灯','右外侧尾灯','后备箱门框','后备箱内衬','左尾门电动撑杆','右尾门电动撑杆','左后翼子板','右后翼子板','左后侧围','右后侧围'],
-    roof:['电动天窗','全景玻璃车顶','左行李架','右行李架','左侧顶梁','右侧顶梁'],
+    roof:['电动天窗','全景玻璃车顶','左行李架','右行李架','左侧顶梁','右侧顶梁','车顶激光雷达'],
+    handle:['右前门'],
     lamp:['右纵向方灯'],badge:['前保险杠'],wheel:['右前轮毂','右前轮胎','右前制动盘'],
+    mirror:['右后视镜'],sensor:['右前侧饰条'],'roof-sensor':['车顶激光雷达'],tire:['右前轮胎'],
   };
   if(!names[id])throw new RangeError('Unknown inspection view');
   const meshes=[];
   for(const part of vehicle.parts){
     if(!names[id].includes(part.name))continue;
-    part.traverse(node=>{if(node.isMesh&&(id!=='badge'||node.material.name.startsWith('VW ')))meshes.push(node);});
+    part.traverse(node=>{if(node.isMesh&&(id!=='badge'||node.material.name.startsWith('VW '))&&(id!=='handle'||node.userData.detail==='handle'))meshes.push(node);});
   }
   return meshes;
 }

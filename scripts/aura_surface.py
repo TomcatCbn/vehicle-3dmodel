@@ -44,7 +44,7 @@ def side_width(x, z):
     flare = sum(.021*math.exp(-((x-wx)/.50)**4)*math.exp(-((z-.77)/.27)**2)
                 for wx in [-1.418,1.418])
     scoop = -.017*math.exp(-((x-.05)/1.05)**4)*math.exp(-((z-.64)/.14)**2)
-    lower_scallop=-.010*math.exp(-((x-.12)/1.05)**4)*math.exp(-((z-(.47+.045*smoothstep(-1,.9,x)))/.065)**2)
+    lower_scallop=-.022*math.exp(-((x-.12)/1.05)**4)*math.exp(-((z-(.49+.068*smoothstep(-1,.9,x)))/.065)**2)
     return _side_section(section_z)+flare+scoop+lower_scallop
 
 
@@ -143,7 +143,8 @@ def front_surface(y, z):
     turn = (.300+.015*math.sin(t*math.pi))*(1-math.sqrt(max(0.0,1-u**4)))
     center=-2.322-.100*math.sin(math.pi*t)+.038*math.exp(-((z-.75)/.15)**2)
     pocket=.017*math.exp(-((abs(y)-.725)/.145)**4-((z-.741)/.140)**4)
-    return (center+turn+pocket, y, z)
+    plate_bowl=.025*math.exp(-((z-.716)/.121)**4)*math.exp(-(y/.655)**8)
+    return (center+turn+pocket+plate_bowl, y, z)
 
 
 def rear_surface(y, z):
@@ -230,7 +231,7 @@ def verify():
         for x in knots:
             left=(fn(x)-fn(x-h))/h; right=(fn(x+h)-fn(x))/h
             assert abs(left-right) < .005, (x,left,right)
-    assert front_surface(0,.68)[0] < front_surface(0,1.01)[0]-.05
+    assert .025 < front_surface(0,1.01)[0]-front_surface(0,.68)[0] < .05
     assert .025 < rear_surface(0,.78)[0]-rear_surface(0,1.105)[0] < .045
     assert rear_surface(.5,.49)[0] > rear_surface(.5,1.105)[0]+.07
     for z in [.72,.85,1.0]:

@@ -41,9 +41,22 @@ def mat(name, color, metallic=0, roughness=.4, emission=0):
         p.inputs['Emission Strength'].default_value = emission
     return m
 
-paint = mat('Paint', (.055,.22,.18), .65,.23)
+paint = mat('Paint', (.095,.265,.22), .48,.28)
+handle_cup = mat('Paint handle cup', (.0304,.0848,.0704), .35,.40)
+handle_mark = mat('Handle touch sensor etching', (.17,.27,.24), .05,.58)
+model_plate = mat('Model plate matte black', (.006,.008,.011), 0,.48)
+plate_lettering = mat('Model plate lettering', (.72,.77,.78), 0,.42)
 black = mat('Obsidian trim', (.012,.018,.022), .35,.32)
 rubber = mat('Tire rubber', (.015,.017,.019), 0,.88)
+tire_letter = mat('Moulded tire lettering', (.011,.012,.013), 0,.76)
+mirror_cap = mat('Mirror gloss black cap', (.005,.007,.009), .08,.28)
+mirror_cap.node_tree.nodes.get('Principled BSDF').inputs['Coat Weight'].default_value=.45
+sensor_black = mat('Sensor satin housing', (.006,.008,.010), .06,.37)
+indicator_lens = mat('Mirror indicator clear ribs', (.29,.33,.35), .12,.19)
+mirror_glass = mat('Mirror reflective glass', (.38,.45,.48), .98,.07)
+sensor_optic = mat('Sensor optical glass', (.008,.015,.020), .08,.09)
+sensor_optic.node_tree.nodes.get('Principled BSDF').inputs['Coat Weight'].default_value=.8
+sensor_optic.node_tree.nodes.get('Principled BSDF').inputs['Transmission Weight'].default_value=.18
 glass = mat('Glazing', (.045,.075,.095), .0,.08)
 alloy = mat('Machined alloy', (.56,.62,.65), .88,.24)
 steel = mat('Structural steel', (.12,.16,.18), .7,.42)
@@ -192,6 +205,7 @@ def ring(name, center, radius, material, group, axis='Y', wire=.007):
     for i in range(72):
         a=i/72*math.tau
         if axis == 'Y': pt=(center[0]+radius*math.cos(a),center[1],center[2]+radius*math.sin(a))
+        elif axis == 'Z': pt=(center[0]+radius*math.cos(a),center[1]+radius*math.sin(a),center[2])
         else: pt=(center[0],center[1]+radius*math.cos(a),center[2]+radius*math.sin(a))
         pts.append(pt)
     return tube(name,pts,wire,material,group,True)
@@ -262,6 +276,56 @@ def rounded_outline(corners,radius=.035):
         dense.extend(a.lerp(b,j/steps) for j in range(steps))
     return dense
 
+def handle_outline(width,height,radius):
+    points=[]
+    for x,z,a in [(width/2-radius,height/2-radius,0),(-width/2+radius,height/2-radius,math.pi/2),(-width/2+radius,-height/2+radius,math.pi),(width/2-radius,-height/2+radius,math.pi*1.5)]:
+        for i in range(9):
+            angle=a+i/8*math.pi/2
+            points.append((x+radius*math.cos(angle),z+radius*math.sin(angle)))
+    return points
+
+def recessed_door_handle(skin,group,x,side):
+    z0=.984
+    def point(dx,dz,depth):
+        xx=x+dx;z=z0+dz;v=(z-.32)/(belt_height(xx)-.32)
+        return (xx+.024*math.sin(v*math.pi)*math.exp(-((xx-.18)/.22)**2),side*(side_width(xx,z)+depth),z)
+    for modifier in list(skin.modifiers):
+        bpy.context.view_layer.objects.active=skin
+        bpy.ops.object.modifier_apply(modifier=modifier.name)
+    cutter=box('Handle aperture cutter',point(0,0,0),(.224,.14,.080),black,group,.021)
+    for modifier in list(cutter.modifiers):
+        if modifier.type=='BEVEL':modifier.segments=8
+        bpy.context.view_layer.objects.active=cutter
+        bpy.ops.object.modifier_apply(modifier=modifier.name)
+    bpy.context.view_layer.objects.active=skin
+    cut=skin.modifiers.new('Recessed handle opening','BOOLEAN');cut.operation='DIFFERENCE';cut.object=cutter
+    bpy.ops.object.modifier_apply(modifier=cut.name)
+    bpy.data.objects.remove(cutter,do_unlink=True)
+    lip=skin.modifiers.new('Handle aperture edge','BEVEL');lip.width=.001;lip.segments=2;lip.limit_method='ANGLE'
+    def shell(name,profiles,material,cap=False):
+        vs=[];fs=[];n=36
+        for width,height,radius,depth in profiles:
+            vs.extend(point(dx,dz,depth) for dx,dz in handle_outline(width,height,radius))
+        for j in range(len(profiles)-1):
+            for i in range(n):
+                a=j*n+i;b=j*n+(i+1)%n;face=(a,b,b+n,a+n)
+                fs.append(face if side<0 else tuple(reversed(face)))
+        if cap:
+            face=tuple(range(n))
+            back=mesh('Handle pocket back liner',vs[-n:],[face if side<0 else tuple(reversed(face))],group,material);back['detail']='handle'
+        obj=mesh(name,vs,fs,group,material);obj['detail']='handle'
+        return obj
+    shell('Handle perimeter seal',[(.226,.082,.022,.0015),(.222,.078,.020,-.002)],rubber)
+    shell('Handle recessed cup',[(.220,.076,.019,-.002),(.212,.068,.019,-.008),(.202,.058,.018,-.021),(.190,.048,.016,-.030),(.176,.038,.014,-.034),(.150,.024,.010,-.035),(.060,.012,.005,-.0352)],handle_cup,True)
+    outline=handle_outline(.216,.036,.012)
+    vs=[point(0,.020,.0015)]+[point(dx,dz+.020,.0008) for dx,dz in outline]
+    fs=[]
+    for i in range(len(outline)):
+        face=(0,i+1,(i+1)%len(outline)+1);fs.append(face if side<0 else tuple(reversed(face)))
+    flap=mesh('Handle flush upper flap',vs,fs,group,paint,.008);flap['detail']='handle'
+    seam=tube('Handle fixed end cap joint',[point(.065,dz,.0016) for dz in [.003,.010,.020,.030,.037]],.00065,black,group);seam['detail']='handle'
+    mark=tube('Handle touch sensor marking',[point(dx,dz+.020,.0012) for dx,dz in handle_outline(.014,.006,.0015)],.00025,handle_mark,group,True);mark['detail']='handle'
+
 def glazing_panel(name,corners,group):
     side=1 if corners[0][1]>0 else -1
     corners[:]=[(x,side*cabin_width(x,z),z) for x,y,z in corners]
@@ -301,8 +365,8 @@ def vw_emblem(group,center,radius,normal,right):
             for i in range(n):
                 a=j*n+i;b=j*n+(i+1)%n;fs.append((a,b,b+n,a+n))
         return mesh(name,vs,fs,group,material)
-    lathe('VW stepped black mounting bezel',[(1.13,-.035),(1.15,.005),(1.15,.040),(1.13,.074),(1.09,.095),(1.02,.108)],badge_black)
-    lathe('VW outer polished hairline',[(1.116,.087),(1.111,.099),(1.095,.106),(1.087,.100)],badge_edge)
+    lathe('VW stepped black mounting bezel',[(1.13,-.055),(1.16,-.015),(1.16,.025),(1.145,.055),(1.12,.080),(1.065,.104),(1.02,.108)],badge_black)
+    lathe('VW outer polished hairline',[(1.108,.091),(1.105,.098),(1.098,.102),(1.092,.098)],badge_edge)
     lathe('VW gently crowned black face',[(1.10-i*1.10/20,.109+.018*(1-(1-i/20)**2)) for i in range(21)],badge_black)
     # Flat annular face with a small edge chamfer, rather than a round wire hoop.
     lathe('VW flat silver roundel',[(1.001,.111),(1.000,.125),(.991,.132),(VW_RING_INNER+.007,.132),(VW_RING_INNER,.125),(VW_RING_INNER,.111)],badge_silver)
@@ -385,18 +449,16 @@ for side in [-1,1]:
     for index,(x0,x1) in enumerate([(-1.008,.184),(.188,1.230)]):
         hinge=(x0,side*.875,belt_height(x0))
         p=part(f'door_{side}_{index}',label+('前门' if index==0 else '后门'),'body',hinge,(0,side*1.05,.16),.03,'door',side)
-        side_skin('Sculpted door skin',x0,x1,side,p,arches=index==1)
+        skin=side_skin('Sculpted door skin',x0,x1,side,p,arches=index==1)
         lining_end=min(x1,1.0)
         box('Inner door lining',((x0+lining_end)/2,side*.815,.73),(lining_end-x0-.04,.035,.58),seat_dark,p,.03)
         handle_x=x1-.21
-        handle_y=side_width(handle_x,.98)+.009
-        box('Semi recessed handle',(handle_x,side*handle_y,.98),(.18,.018,.032),black,p,.012)
-        box('Handle lip',(handle_x,side*(handle_y+.010),.993),(.165,.010,.012),paint,p,.005)
+        recessed_door_handle(skin,p,handle_x,side)
         cladding_vs=[];cladding_fs=[]
         for j in range(7):
             for i in range(49):
                 x=x0+(min(x1,1.01)-x0)*i/48
-                height=.008+.112*smoothstep(-1.01,-.62,x)*(1-smoothstep(.91,1.22,x))
+                height=.008+.128*smoothstep(-1.01,-.62,x)*(1-smoothstep(.91,1.22,x))
                 z=.322+height*j/6
                 xx=x+.024*math.sin((z-.32)/(belt_height(x)-.32)*math.pi)*math.exp(-((x-.18)/.22)**2)
                 cladding_vs.append((xx,side*(side_width(x,z)+.008),z))
@@ -412,6 +474,14 @@ for side in [-1,1]:
         w=part(f'window_{side}_{index}',label+('前窗' if index==0 else '后窗'),'cabin',hinge,(0,side*1.3,1.0),.19,'window',side)
         glazing_panel('Moving side glass',points,w)
         tube('Window lower seal',[points[0],points[3]],.007,black,p)
+        belt_vs=[];belt_fs=[]
+        for i in range(65):
+            t=i/64;x=points[0][0]*(1-t)+points[3][0]*t
+            low=belt_height(x)-.001;high=points[0][2]*(1-t)+points[3][2]*t
+            belt_vs.extend([(x,side*(side_width(x,low)+.001),low),(x,side*cabin_width(x,high),high)])
+        for i in range(64):
+            k=i*2;face=(k,k+2,k+3,k+1);belt_fs.append(face if side<0 else tuple(reversed(face)))
+        mesh('Continuous door belt seal',belt_vs,belt_fs,p,black,.003)
     for front in [True,False]:
         x0,x1=(-2.15,-1.012) if front else (1.234,2.30)
         p=part(f'fender_{side}_{front}',label+('前翼子板' if front else '后翼子板'),'body',offset=(-.3 if front else .3,side*.65,.12),start=.08)
@@ -434,8 +504,17 @@ for side in [-1,1]:
                 well_vs.append((x,side*y,z))
         for i in range(n):well_fs.append((i,i+1,i+n+2,i+n+1))
         mesh('Wheel well tunnel',well_vs,well_fs,p,well_liner)
-        plate=[(wx,side*.714,.37)]+[(wx+.405*math.cos(i/128*math.tau),side*.714,max(.05,.37+.405*math.sin(i/128*math.tau))) for i in range(128)]
-        mesh('Wheel well rear liner',plate,[(0,i+1,(i+1)%128+1) for i in range(128)],p,well_liner)
+        # Only the upper crescent closes the tire-to-arch gap; the axle and lower cavity stay open.
+        inner_vs=[];inner_fs=[]
+        for radius,y in [(.300,.670),(.360,.690),(.403,.715)]:
+            for i in range(n+1):
+                a=math.pi*i/n
+                inner_vs.append((wx+radius*math.cos(a),side*y,.37+radius*math.sin(a)))
+        for j in range(2):
+            for i in range(n):
+                k=j*(n+1)+i;face=(k,k+1,k+n+2,k+n+1)
+                inner_fs.append(face if side>0 else tuple(reversed(face)))
+        mesh('Wheel well curved upper inner return',inner_vs,inner_fs,p,well_liner)
         for direction in [-1,1]:
             points=[(wx+direction*r,side*(side_width(wx+direction*r,z)+.006),z) for r,z in [(.402,.32),(.402,.37),(.445,.37),(.445,.32)]]
             mesh('Arch lower return',points,[(0,1,2,3)],p,black,.004)
@@ -511,21 +590,75 @@ for side in [-1,1]:
             d_fs.append((k,k+1,k+n+2,k+n+1) if side<0 else (k,k+n+1,k+n+2,k+1))
     mesh('Swept rear D pillar',d_vs,d_fs,pillar_c,paint,.008)
     mirror=part(f'mirror_{side}',label+'后视镜','body',(-.87,side*.99,1.12),(-.15,side*1.3,.25),.1)
-    tube('Mirror stem',[(-.96,side*.88,1.11),(-.87,side*1.015,1.13)],.020,black,mirror,smooth=True)
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=40,ring_count=20,location=(-.85,side*1.04,1.15))
-    housing=bpy.context.object;housing.name='Streamlined mirror housing';housing.scale=(.145,.091,.056)
-    bpy.ops.object.transform_apply(location=False,rotation=False,scale=True);parent(housing,mirror,black)
-    box('Mirror glass',(-.715,side*1.04,1.153),(.009,.132,.065),alloy,mirror,.018)
-    tube('Mirror indicator',[(-.97,side*1.01,1.146),(-.955,side*1.09,1.146),(-.89,side*1.126,1.146)],.0025,white,mirror,smooth=True)
+    # Two continuous shells share the indicator seam; the rear opening carries a mirror face.
+    mirror_sections=[(-1.005,.002,.002),(-.992,.060,.028),(-.960,.109,.052),(-.90,.139,.068),(-.82,.140,.066),(-.735,.117,.047)]
+    mirror_w=section([(x,w) for x,w,h in mirror_sections]);mirror_h=section([(x,h) for x,w,h in mirror_sections])
+    def mirror_point(x,a,extra=0):
+        c=math.cos(a);sn=math.sin(a)
+        return (x,side*(1.047+(mirror_w(x)+extra)*math.copysign(abs(c)**.82,c)),1.151+.022*(x+.9)+(mirror_h(x)+extra)*math.copysign(abs(sn)**.82,sn)*(1 if sn>=0 else .65))
+    for name,begin,material in [('Mirror upper crowned shell',0,mirror_cap),('Mirror lower satin shell',math.pi,sensor_black)]:
+        vs=[];fs=[];nx=56;na=32
+        for i in range(nx+1):
+            x=-1.005+.270*i/nx
+            for j in range(na+1):vs.append(mirror_point(x,begin+math.pi*j/na))
+        for i in range(nx):
+            for j in range(na):
+                k=i*(na+1)+j;face=(k,k+na+1,k+na+2,k+1)
+                fs.append(face if side<0 else tuple(reversed(face)))
+        mesh(name,vs,fs,mirror,material,.002)
+    stem=[(-.96,side*.895,1.112),(-.79,side*.909,1.096),(-.76,side*1.038,1.115),(-.91,side*1.062,1.126),
+          (-.96,side*.895,1.148),(-.79,side*.909,1.125),(-.76,side*1.038,1.146),(-.91,side*1.062,1.153)]
+    mesh('Mirror sculpted mounting foot',stem,[(0,3,2,1),(4,5,6,7),(0,1,5,4),(1,2,6,5),(2,3,7,6),(3,0,4,7)],mirror,sensor_black,bevel=.012)
+    # Glass occupies the rear-facing opening instead of a thick rectangular block.
+    vs=[(-.730,side*1.047,1.151)];outline=[]
+    for i in range(96):
+        a=i/96*math.tau;q=Vector(mirror_point(-.735,a));q.x=-.731
+        q.y=side*1.047+(q.y-side*1.047)*.94;q.z=1.151+(q.z-1.151)*.91
+        outline.append(tuple(q))
+    vs+=outline;faces=[(0,i+1,(i+1)%96+1) for i in range(96)]
+    mesh('Mirror reflective glass',vs,[tuple(reversed(f)) for f in faces] if side<0 else faces,mirror,mirror_glass)
+    tube('Mirror glass perimeter gasket',outline,.0022,sensor_black,mirror,True)
+    seam=[mirror_point(-1.0+.252*i/64,0,.001) for i in range(65)]
+    tube('Mirror indicator dark channel',seam,.0034,sensor_black,mirror)
+    tube('Mirror indicator clear light guide',seam,.0019,indicator_lens,mirror)
+    for i in range(62):
+        x=-.987+.237*i/61;q=Vector(mirror_point(x,0,.0028))
+        tube('Mirror indicator prism rib',[tuple(q+Vector((0,0,-.002))),tuple(q+Vector((0,0,.002)))],.00035,indicator_lens,mirror)
+    merge_static_details(mirror,'Mirror indicator prism rib',indicator_lens)
+    cylinder('Mirror underside camera socket',(-.88,side*1.13,1.116),.012,.006,sensor_black,mirror,'Z',40)
+    cylinder('Mirror underside camera lens',(-.88,side*1.13,1.112),.0078,.002,sensor_optic,mirror,'Z',40)
+    ring('Mirror underside camera bezel',(-.88,side*1.13,1.112),.0095,black,mirror,'Z',.0008)
     vent=part(f'side_vent_{side}',label+'前侧饰条','body',(-1.06,side*.944,1.01),(-.2,side*.55,.12),.1)
-    box('Fender blade',(-1.08,side*.945,1.01),(.22,.014,.05),black,vent,.015)
-    cylinder('Fender camera',(-1.08,side*.956,1.012),.014,.011,black,vent,vertices=24)
-    cylinder('Fender camera lens',(-1.08,side*.963,1.012),.008,.004,glass,vent,vertices=24)
+    contour=rounded_outline([(-1.23,0,1.055),(-.952,0,1.037),(-.973,0,.982),(-1.173,0,1.004)],.008)
+    def fender_point(x,z,depth):return (x,side*(side_width(x,z)+depth),z)
+    center=Vector((-1.087,0,1.023));n=len(contour)
+    vs=[fender_point(center.x,center.z,.021)]
+    for q in contour:vs.append(fender_point(q.x,q.z,.004))
+    fs=[(0,i+1,(i+1)%n+1) for i in range(n)]
+    mesh('Fender sculpted sensor wing',vs,fs if side<0 else [tuple(reversed(f)) for f in fs],vent,sensor_black,.004)
+    tube('Fender raised upper lip',[fender_point(x,z,.009) for x,z in [(-1.222,1.050),(-1.16,1.041),(-1.09,1.035),(-1.018,1.034),(-.958,1.035)]],.0023,mirror_cap,vent,smooth=True)
+    inset=[(-1.057,1.022),(-.972,1.031),(-.984,.993),(-1.050,1.006)]
+    mesh('Fender recessed triangular optic insert',[fender_point(x,z,.022) for x,z in inset],[(0,1,2,3)],vent,mirror_cap,.002)
+    for pts in [[(-1.037,1.017),(-1.007,1.021),(-.980,1.026)],[(-1.037,1.008),(-1.010,1.001),(-.985,.997)]]:
+        tube('Fender optic sculpted fin',[fender_point(x,z,.025) for x,z in pts],.0013,black,vent,smooth=True)
+    cx=-1.039;cz=1.014;cy=side*(side_width(cx,cz)+.026)
+    cylinder('Fender camera socket',(cx,cy,cz),.0107,.003,sensor_black,vent,vertices=40)
+    cylinder('Fender camera lens',(cx,cy+side*.002,cz),.0072,.002,sensor_optic,vent,vertices=40)
+    ring('Fender camera retaining ring',(cx,cy+side*.002,cz),.009,black,vent,wire=.0008)
+    tube('Fender forward recessed channel',[fender_point(x,z,.012) for x,z in [(-1.211,1.041),(-1.184,1.031),(-1.17,1.020)]],.0032,black,vent,smooth=True)
+    vent.location.x-=.070
     # Wheels are true tire profiles, separately exploded from rims and brakes.
     for x in [-1.418,1.418]:
         position=(x,side*.817,.37)
         p=part(f'tire_{side}_{x}',label+('前轮胎' if x<0 else '后轮胎'),'chassis',position,(0,side*1.65,0),.36)
-        profile=[(-.115,.255),(-.125,.28),(-.112,.335),(-.08,.366),(-.045,.372),(.045,.372),(.08,.366),(.112,.335),(.125,.28),(.115,.255)]
+        profile=[(-.113,.270),(-.126,.287),(-.122,.313),(-.110,.342),(-.086,.362),(-.05,.372),(.05,.372),(.086,.362),(.110,.342),(.122,.313),(.126,.287),(.113,.270)]
+        control=[Vector(p) for p in profile];profile=[]
+        for i in range(len(control)-1):
+            a,b,c,d=[control[k] for k in [max(0,i-1),i,i+1,min(len(control)-1,i+2)]]
+            for j in range(6):
+                t=j/6;q=.5*(2*b+(-a+c)*t+(2*a-5*b+4*c-d)*t*t+(-a+3*b-3*c+d)*t*t*t)
+                profile.append((q.x,min(.372,q.y)))
+        profile.append(tuple(control[-1]))
         vs=[];fs=[];n=192
         for dy,r in profile:
             for k in range(n):
@@ -534,22 +667,50 @@ for side in [-1,1]:
             for k in range(n):
                 a=j*n+k;b=j*n+(k+1)%n;fs.append((a,b,b+n,a+n))
         mesh('Touring tire',vs,fs,p,rubber)
-        for dy in [-.065,-.025,.025,.065]:ring('Tread channel',(x,side*.817+dy,.37),.371,black,p,wire=.002)
-        for r in [.29,.326,.34]:ring('Sidewall moulding',(x,side*.936,.37),r,rubber,p,wire=.0018)
-        for k in range(96):
-            a=k/96*math.tau
+        for dy in [-.065,-.025,.025,.065]:ring('Tread channel',(x,side*.817+dy,.37),.371,well_liner,p,wire=.0022)
+        def side_depth(r):
+            hits=[]
+            for (ay,ar),(by,br) in zip(profile,profile[1:]):
+                if min(ar,br)<=r<=max(ar,br) and abs(br-ar)>1e-8:
+                    hits.append(ay+(by-ay)*(r-ar)/(br-ar))
+            return max(hits) if hits else .075
+        for r in [.289,.295,.350,.354]:ring('Sidewall fine moulding',(x,side*(.817+side_depth(r)+.0005),.37),r,rubber,p,wire=.0005)
+        for k in range(120):
+            a=k/120*math.tau
             pts=[]
-            for dy in [-.08,0,.08]:
-                aa=a+.035*(1-abs(dy)/.08)
-                pts.append((x+.371*math.cos(aa),side*.817+dy,.37+.371*math.sin(aa)))
-            tube('Fine tread sipe',pts,.0012,black,p)
-        for content,dz,size in [('TOURING',.318,.013),('235 / 50 R20',-.326,.011)]:
-            bpy.ops.object.text_add(location=(x,side*.940,.37+dz))
-            lettering=bpy.context.object;lettering.name='Raised tire specification';lettering.data.body=content
-            lettering.data.size=size;lettering.data.align_x='CENTER';lettering.data.align_y='CENTER';lettering.data.extrude=.0004
-            lettering.rotation_euler=Matrix(((-side,0,0),(0,0,side),(0,1,0))).to_euler()
-            bpy.ops.object.convert(target='MESH');parent(lettering,p,rubber)
-        merge_static_details(p,'Fine tread sipe',black)
+            for dy in [-.092,-.065,-.025,.025,.065,.092]:
+                aa=a+.030*(1-abs(dy)/.092)
+                r=.372-.011*(abs(dy)/.092)**5
+                pts.append((x+r*math.cos(aa),side*.817+dy,.37+r*math.sin(aa)))
+            tube('Fine tread sipe',pts,.0009,well_liner,p)
+        # Individual letters follow the sidewall crown; no unverified tire size is shown.
+        for content,angle0,r,size,spacing in [('Hankook',.18,.331,.021,.043),('iON',-1.45,.330,.019,.042),('OUTSIDE',2.0,.309,.008,.024),('EV',-2.63,.329,.010,.028)]:
+            for i,char in enumerate(content):
+                a=angle0+(i-(len(content)-1)/2)*spacing
+                normal=Vector((0,side,0));right=Vector((-side*math.cos(a),0,-math.sin(a)));up=normal.cross(right)
+                bpy.ops.object.text_add(location=(x-side*r*math.sin(a),side*(.817+side_depth(r)+.0007),.37+r*math.cos(a)))
+                lettering=bpy.context.object;lettering.name='Moulded tire '+content+' glyph'
+                lettering.data.body=char;lettering.data.size=size;lettering.data.align_x='CENTER';lettering.data.align_y='CENTER';lettering.data.extrude=.00045
+                lettering.rotation_euler=Matrix((right,up,normal)).transposed().to_euler()
+                bpy.ops.object.convert(target='MESH')
+                matrix=lettering.matrix_world.copy();inverse=matrix.inverted()
+                for vertex in lettering.data.vertices:
+                    q=matrix@vertex.co;r0=math.hypot(q.x-x,q.z-.37)
+                    q.y=side*(.817+side_depth(r0)+.0008+vertex.co.z)
+                    vertex.co=inverse@q
+                parent(lettering,p,tire_letter)
+            merge_static_details(p,'Moulded tire '+content,tire_letter)
+        for k in range(80):
+            a=k/80*math.tau
+            r=.353;dy=side_depth(r)
+            q=Vector((x+r*math.cos(a),side*(.817+dy),.37+r*math.sin(a)))
+            tube('Tire shoulder mould nib',[tuple(q),tuple(q+Vector((.0008*math.cos(a),side*.0012,.0008*math.sin(a))))],.00028,rubber,p)
+        for k in range(72):
+            a=math.pi*.55+k/72*math.pi*.35
+            tube('Sidewall fine hatching',[(x+r*math.cos(a),side*(.817+side_depth(r)+.0005),.37+r*math.sin(a)) for r in [.309,.322]],.00024,rubber,p)
+        merge_static_details(p,'Fine tread sipe',well_liner)
+        merge_static_details(p,'Tire shoulder mould nib',rubber)
+        merge_static_details(p,'Sidewall fine hatching',rubber)
         rim_y=side*.932
         rim=part(f'rim_{side}_{x}',label+('前轮毂' if x<0 else '后轮毂'),'chassis',(x,rim_y,.37),(0,side*1.2,0),.43)
         wheel_lathe('Open alloy wheel barrel',x,side,[(-.09,.228),(.106,.228),(.13,.239),(.14,.250),(.137,.258),(.119,.260),(-.09,.260),(-.09,.228)],rim,black)
@@ -559,49 +720,54 @@ for side in [-1,1]:
         for k in range(5):
             angle=k/5*math.tau+math.pi/2
             pts=[]
-            outline=[(.055,-.40),(.135,-.32),(.224,-.50),(.250,-.45),(.250,-.20),(.181,0),(.250,.20),(.250,.45),(.224,.50),(.135,.32),(.055,.40)]
+            outline=[(.055,-.39),(.135,-.40),(.221,-.48),(.250,-.45),(.250,-.22),(.147,-.23),(.118,-.14),(.118,.14),(.147,.23),(.250,.22),(.250,.45),(.221,.48),(.135,.40),(.055,.39)]
             for r,delta in outline:
                 a=angle+delta
                 depth=.091+.042*(r/.25)**2
                 pts.append((x+r*math.cos(a),side*(.817+depth),.37+r*math.sin(a)))
             face=tuple(range(len(pts)))
-            mesh('Sculpted split aero spoke',pts,[face if side<0 else tuple(reversed(face))],rim,black,.024,.003)
-            center=sum((Vector(p) for p in pts),Vector())/len(pts)
-            border=[]
-            for scale in [1,.82]:
-                for p in pts:
-                    q=center+(Vector(p)-center)*scale
-                    r=math.hypot(q.x-x,q.z-.37);q.y=side*(.817+.091+.042*(r/.25)**2+.003)
-                    border.append(tuple(q))
-            count=len(pts)
-            faces=[(i,(i+1)%count,(i+1)%count+count,i+count) for i in range(count)]
-            mesh('Diamond cut concave spoke face',border,faces if side<0 else [tuple(reversed(f)) for f in faces],rim,alloy,.0015)
+            mesh('Sculpted split aero spoke',pts,[face if side<0 else tuple(reversed(face))],rim,mirror_cap,.024,.003)
+            # Silver follows the outer U only; the spoke root stays gloss black.
+            border=[];edge=[Vector((q[0]-x,q[2]-.37)) for q in pts[2:12]]
+            for offset in [-.0035,.0035]:
+                for i,q0 in enumerate(edge):
+                    tangent=(edge[min(i+1,len(edge)-1)]-edge[max(0,i-1)]).normalized()
+                    q=q0+offset*Vector((-tangent.y,tangent.x));r=q.length
+                    border.append((x+q.x,side*(.817+.091+.042*(r/.25)**2+.003),.37+q.y))
+            count=len(edge)
+            faces=[(i,i+1,i+1+count,i+count) for i in range(count-1)]
+            mesh('Diamond cut concave spoke face',border,faces if side<0 else [tuple(reversed(f)) for f in faces],rim,alloy,.001)
             a=angle+math.pi/5
-            insert=[(x+r*math.cos(a+da),side*.899,.37+r*math.sin(a+da)) for r,da in [(.16,-.10),(.235,-.16),(.235,.16),(.16,.10)]]
-            mesh('Recessed aero insert',insert,[(0,1,2,3)],rim,black,.006,.002)
-            for rib in range(7):
-                a=angle+math.pi/5-.12+rib*.04
-                tube('Aero insert rib',[(x+r*math.cos(a),side*.902,.37+r*math.sin(a)) for r in [.17,.20,.231]],.0013,steel,rim)
+            # Triangular ribbed aero pockets fill the rim valleys without closing the five windows.
+            outline=[(.184,0),(.242,-.165),(.246,0),(.242,.165)]
+            insert=[(x+r*math.cos(a+da),side*.947,.37+r*math.sin(a+da)) for r,da in outline]
+            mesh('Recessed triangular aero insert',insert,[(0,1,2,3)] if side<0 else [(3,2,1,0)],rim,mirror_cap,.006,.001)
+            for rib in range(9):
+                da=-.133+rib*.03325
+                inner=.189+.040*abs(da)/.15
+                tube('Aero insert rib',[(x+r*math.cos(a+da),side*.951,.37+r*math.sin(a+da)) for r in [inner,.232,.240]],.0010,black,rim)
+            tube('Aero insert machined outer arc',[(x+.247*math.cos(a+da),side*.955,.37+.247*math.sin(a+da)) for da in [-.14+.28*i/20 for i in range(21)]],.0018,alloy,rim)
         cylinder('Hub',(x,side*.915,.37),.049,.025,black,rim)
         vw_emblem(rim,(x,side*.929,.37),.0275,(0,side,0),(-side,0,0))
         for bolt in range(5):
             a=bolt/5*math.tau
             cylinder('Wheel fastener recess',(x+.063*math.cos(a),side*.918,.37+.063*math.sin(a)),.011,.004,black,rim,vertices=20)
             cylinder('Wheel fastener',(x+.063*math.cos(a),side*.922,.37+.063*math.sin(a)),.0065,.007,alloy,rim,vertices=12)
-        merge_static_details(rim,'Aero insert rib',steel)
+        merge_static_details(rim,'Aero insert rib',black)
+        cylinder('Tire valve rubber stem',(x,side*.947,.37+.230),.0036,.012,rubber,rim,vertices=16)
+        cylinder('Tire valve dust cap',(x,side*.956,.37+.230),.0045,.006,black,rim,vertices=16)
+        bpy.context.view_layer.update()
+        for child in rim.children_recursive:
+            if child.type!='MESH':continue
+            matrix=child.matrix_world.copy();inverse=matrix.inverted()
+            for vertex in child.data.vertices:
+                q=matrix@vertex.co;q.x=x+(q.x-x)*1.12;q.z=.37+(q.z-.37)*1.12
+                vertex.co=inverse@q
+            child.data.update()
         brake=part(f'brake_{side}_{x}',label+('前制动盘' if x<0 else '后制动盘'),'chassis',(x,side*.87,.37),(0,side*.75,0),.48)
         cylinder('Brake disc',(x,side*.87,.37),.195,.025,steel,brake)
         ring('Rotor edge',(x,side*.884,.37),.192,alloy,brake,wire=.0015)
-        holes_vs=[];holes_fs=[]
-        for k in range(24):
-            a=k/24*math.tau
-            for r in [.153,.178]:
-                center=Vector((x+r*math.cos(a),side*.884,.37+r*math.sin(a)));start=len(holes_vs)
-                holes_vs.append(tuple(center))
-                for i in range(12):
-                    angle=i/12*math.tau;holes_vs.append(tuple(center+Vector((.003*math.cos(angle),0,.003*math.sin(angle)))))
-                holes_fs.extend((start,start+i+1,start+(i+1)%12+1) for i in range(12))
-        mesh('Rotor perforation details',holes_vs,holes_fs,brake,black)
+        for r in [.145,.166,.184]:ring('Rotor swept machining',(x,side*.885,.37),r,alloy,brake,wire=.0003)
         box('Brake caliper',(x+.15,side*.88,.37),(.065,.06,.16),black,brake,.018)
 
 # The bonnet is a separate hinged panel, inset behind the fixed nose bridge.
@@ -797,10 +963,22 @@ for side in [-1,1]:
     for y,z in [(side*.82,.55),(side*.45,.56)]:
         x=front_surface(y,z)[0]
         cylinder('Front parking sensor',(x-.004,y,z),.012,.004,paint,front,'X',24)
-plate_x=front_surface(0,.620)[0]-.013
-box('Front license plate',(plate_x,0,.620),(.014,.42,.135),black,front,.009)
-mesh('Lower central plate support',[(front_surface(y,z)[0]-.003,y,z) for y,z in [(-.19,.552),(-.155,.43),(.155,.43),(.19,.552)]],[(0,1,2,3)],front,black,.012)
-text_label('ID. AURA T6',(plate_x-.009,0,.620),.036,front)
+plate_z=.642
+plate_x=min(front_surface(y,z)[0] for y in [-.23,0,.23] for z in [.565,plate_z,.719])-.014
+box('Front plate mounting plinth',(plate_x+.009,0,plate_z),(.026,.458,.155),black,front,.008)
+box('Front license plate',(plate_x-.009,0,plate_z),(.006,.440,.145),model_plate,front,.006)
+text_label('ID.AURA T6',(plate_x-.014,0,plate_z),.041,front,False,plate_lettering)
+camera_z=.788;camera_x=front_surface(0,camera_z)[0]
+cylinder('Front camera bezel',(camera_x-.003,0,camera_z),.014,.004,alloy,front,'X',40)
+cylinder('Front camera dark socket',(camera_x-.006,0,camera_z),.0115,.005,black,front,'X',40)
+cylinder('Front camera lens',(camera_x-.009,0,camera_z),.0075,.002,sensor_optic,front,'X',40)
+camera_brow=[]
+for i in range(33):
+    a=math.pi*i/32
+    camera_brow.append((camera_x-.008,.0124*math.cos(a),camera_z+.0124*math.sin(a)))
+tube('Front camera painted eyebrow',camera_brow,.0026,paint,front)
+cover_outline=rounded_outline([(0,.445,.466),(0,.525,.466),(0,.525,.566),(0,.445,.566)],.009)
+tube('Front tow eye cover joint',[(front_surface(y,z)[0]-.0015,y,z) for x,y,z in cover_outline],.0008,black,front,True)
 badge(front,front_surface(0,.944)[0]-.003,.944)
 lightbar=part('front_light_bar','前贯穿灯带','body',offset=(-1.2,0,.25),start=.1)
 param_panel('Rounded continuous light bar housing',lambda v,u:light_bar_point(u,v,.0015),lightbar,black,20,128)
@@ -818,18 +996,19 @@ edge_vs=[light_bar_point(u,v,offset) for offset in [0,.005] for u,v in boundary]
 mesh('Rolled light bar perimeter return',edge_vs,[(i+n,(i+1)%n+n,(i+1)%n,i) for i in range(n)],lightbar,black)
 tube('Thin light bar sealing edge',[light_bar_point(u,v,.004) for u,v in boundary],.0013,black,lightbar,True)
 bar_reflector=mat('Front guide dark optical channels',(.018,.025,.032),.35,.30)
-bar_led=mat('Front flat light guide LED',(.52,.64,.72),0,.26,.65)
+bar_led=mat('Front flat light guide LED',(.65,.75,.80),0,.26,1.2)
 for side in [-1,1]:
     for center in [.65,.77,.89]:
         points=[light_bar_point(side*(center+du),v,.003) for du,v in [(-.042,.37),(.042,.37),(.042,.61),(-.042,.61)]]
         mesh('Recessed end optical channel',points,[(0,1,2,3)] if side<0 else [(3,2,1,0)],lightbar,bar_reflector,.001)
-    for name,start,end,v,width in [('Slim flat running light',.09,.965,.20,.025),('Tapered outboard light guide',.60,.965,.75,.045)]:
+    for name,start,end,v,width in [('Slim flat running light',.09,.978,.18,.05),('Tapered outboard light guide',.48,.978,.52,.08)]:
         vs=[];fs=[];n=64
         for row in [-1,1]:
             for i in range(n+1):
                 t=i/n;u=side*(start+(end-start)*t)
                 taper=smoothstep(0,.10,t)*(1-smoothstep(.88,1,t))
-                vs.append(light_bar_point(u,v+row*width*taper,.0035))
+                sweep=.25*t*t if name=='Tapered outboard light guide' else 0
+                vs.append(light_bar_point(u,v+sweep+row*width*taper,.008))
         for i in range(n):
             face=(i,i+1,i+n+2,i+n+1)
             fs.append(tuple(reversed(face)) if side>0 else face)
@@ -900,8 +1079,32 @@ for side in [-1,1]:
 
 for side in [-1,1]:
     rack=part(f'roof_rack_{side}',('左' if side>0 else '右')+'行李架','body',offset=(0,side*.2,2.05),start=.25)
-    tube('Roof rail',[(-.17,side*.655,1.655),(.10,side*.655,1.684),(1.08,side*.66,1.67),(1.48,side*.66,1.59)],.012,black,rack,smooth=True)
-    for x,z in [(-.15,1.645),(1.26,1.617)]:box('Roof rail foot',(x,side*.655,z),(.16,.055,.06),black,rack,.02)
+    # Broad low-profile rail sections taper into two separate feet, leaving a visible daylight gap.
+    rail_height=section([(-.20,1.625),(-.04,1.688),(.18,1.709),(.82,1.704),(1.19,1.652),(1.47,1.582)])
+    rail_width=section([(-.20,.008),(-.04,.020),(.18,.023),(.82,.024),(1.19,.023),(1.47,.009)])
+    vs=[];fs=[];nx=72;nc=16
+    for i in range(nx+1):
+        x=-.20+1.67*i/nx;z=rail_height(x);w=rail_width(x)
+        for j in range(nc):
+            a=j/nc*math.tau
+            vs.append((x,side*(.689+w*math.cos(a)),z+.014*math.sin(a)))
+    for i in range(nx):
+        for j in range(nc):
+            k=i*nc+j;q=i*nc+(j+1)%nc;face=(k,q,q+nc,k+nc)
+            fs.append(face if side<0 else tuple(reversed(face)))
+    front_cap=tuple(range(nc));rear_cap=tuple(nx*nc+j for j in range(nc))
+    fs.extend([front_cap if side<0 else tuple(reversed(front_cap)),tuple(reversed(rear_cap)) if side<0 else rear_cap])
+    mesh('Roof rail sculpted arch',vs,fs,rack,mirror_cap)
+    # The narrow silver insert is inset into the inner vertical face, not a round chrome tube.
+    strip=[];faces=[]
+    for i in range(49):
+        x=.025+1.12*i/48;z=rail_height(x);y=side*(.689-rail_width(x)-.0006)
+        for dz in [-.0045,.0045]:strip.append((x,y,z+dz))
+        if i:faces.append((2*i-2,2*i-1,2*i+1,2*i))
+    mesh('Roof rail inner silver insert',strip,faces if side<0 else [tuple(reversed(f)) for f in faces],rack,alloy,.001)
+    for x in [-.14,1.37]:
+        z=roof_z(x)+.009
+        box('Roof rail integrated foot',(x,side*.689,z+.012),(.15,.060,.038),mirror_cap,rack,.016)
 spoiler=part('rear_spoiler','后扰流板','body',TAILGATE_HINGE,(.6,0,1.45),.2,'tailgate')
 spoiler_vs=[];spoiler_fs=[];nx=32;ny=64
 spoiler_height=section([(0,1.535),(.40,1.545),(.75,1.536),(1,1.524)])
@@ -928,6 +1131,9 @@ for i in [0,nx]:
         k=i*(ny+1)+j;face=(k,k+1,k+1+count,k+count)
         spoiler_fs.append(face if i==0 else tuple(reversed(face)))
 mesh('Rounded integrated roof spoiler',spoiler_vs,spoiler_fs,spoiler,paint,bevel=.003)
+for side in [-1,1]:
+    points=[(1.72,side*.736,1.529),(1.95,side*.768,1.517),(1.94,side*.726,1.430),(1.84,side*.696,1.466)]
+    mesh('Spoiler black side endplate',points,[(0,1,2,3)] if side>0 else [(3,2,1,0)],spoiler,black,.006,.002)
 loft('Spoiler dark underside',[(1.76,1.512,.768),(1.955,1.507,.760)],spoiler,black,.006,.005)
 box('High mounted stop lamp',(1.983,0,1.517),(.010,.52,.008),red,spoiler,.003)
 box('Rear upper camera housing',(1.94,0,1.499),(.042,.078,.029),black,spoiler,.012)
@@ -1082,8 +1288,8 @@ for side in [-1,1]:
         x=rear_surface(y,z)[0]
         cylinder('Rear parking sensor',(x+.024,y,z),.012,.004,black,rear_bumper,'X',24)
 plate_x=rear_surface(0,.555)[0]+.012
-box('Rear license plate',(plate_x,0,.555),(.018,.50,.145),black,rear_bumper,.012)
-text_label('ID. AURA T6',(plate_x+.013,0,.555),.042,rear_bumper,True)
+box('Rear license plate',(plate_x,0,.555),(.018,.46,.155),model_plate,rear_bumper,.008)
+text_label('ID.AURA T6',(plate_x+.013,0,.555),.042,rear_bumper,True,plate_lettering)
 rear_lights=part('tail_lights','后贯穿尾灯','body',TAILGATE_HINGE,(1.18,0,.27),.12,'tailgate')
 rear_led=mat('Rear fine light guide LED',(.42,.004,.008),0,.3,1.3)
 rear_optic=mat('Rear ruby optical chamber',(.085,.002,.004),.15,.23)
@@ -1230,8 +1436,26 @@ console=part('center_console','中央扶手','cabin',(0,0,.7),(0,0,.4),.32)
 box('Console',(.03,0,.71),(.83,.25,.24),black,console,.05)
 box('Arm rest',(.25,0,.86),(.36,.25,.065),leather,console,.03)
 lidar=part('lidar','车顶激光雷达','body',(-.33,0,1.625),(0,0,2.0),.23)
-box('Lidar housing',(-.33,0,1.63),(.17,.29,.075),black,lidar,.027)
-box('Lidar lens',(-.42,0,1.636),(.013,.23,.035),glass,lidar,.01)
+# A low teardrop dome is entirely on the fixed front header, clear of the sliding glass.
+def lidar_point(a,r,height):
+    x=-.345+.100*r*math.cos(a);y=.150*r*math.sin(a)*(.80-.20*math.cos(a))
+    base=roof_z(max(-.32,x))+.022*(1-(y/roof_w(-.32))**2)
+    return (x,y,base+height)
+vs=[];fs=[];n=96
+profile=[(1,.003),(1.015,.009),(.995,.016),(.90,.025),(.65,.034),(.28,.037),(0,.038)]
+for r,h in profile:
+    for i in range(n):vs.append(lidar_point(i/n*math.tau,r,h))
+for j in range(len(profile)-1):
+    for i in range(n):
+        k=j*n+i;q=j*n+(i+1)%n;fs.append((k,q,q+n,k+n))
+mesh('Roof sensor low crowned teardrop shell',vs,fs,lidar,mirror_cap)
+tube('Roof sensor perimeter seal',[lidar_point(i/n*math.tau,1.01,.005) for i in range(n)],.0014,sensor_black,lidar,True)
+vs=[];fs=[]
+for i in range(49):
+    a=math.pi*.64+math.pi*.72*i/48
+    for height in [.012,.027]:vs.append(lidar_point(a,1.004,height))
+    if i:fs.append((2*i-2,2*i,2*i+1,2*i-1))
+mesh('Roof sensor curved front optic',vs,fs,lidar,sensor_optic,.001)
 
 cable=part('charge_cable','充电枪','body',motion='cable')
 cable['part']=False;cable['effect']='cable'

@@ -79,7 +79,11 @@ async function startScene(){
     onEnter(){previousManual=manualCamera;vehicle.root.rotation.y=0;vehicle.update(state,0,'all');},
     onExit(){manualCamera=previousManual;readScroll();},
     onIsolate(value,box){studio.setIsolated(value,box);},
-    onSelect(id){if(id==='hood'){state.hoodOpen=true;state.hoodAngle=1;}vehicle.update(state,0,'all');},
+    onSelect(id){
+      if(id==='hood'){state.hoodOpen=true;state.hoodAngle=1;}
+      if(id==='handle')state.doorAngle=state.doorsOpen?1:0;
+      vehicle.update(state,0,'all');
+    },
   });
   const driving=createDriving({canvas,camera,controls,scene,getState:()=>state,resize,toast,
     onEnter(){previousManual=manualCamera;vehicle.root.rotation.y=0;vehicle.update(state,0,'all');},
@@ -113,15 +117,15 @@ async function startScene(){
     const rect=canvas.getBoundingClientRect();
     pointer.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(pointer,camera);
     const hit=raycaster.intersectObjects(vehicle.root.children,true)[0];if(!hit)return;
-    let node=hit.object;while(node.parent&&!node.userData.part)node=node.parent;return node.userData.part?node:null;
+    let node=hit.object;while(node.parent&&!node.userData.part)node=node.parent;return node.userData.part?{node,detail:hit.object.userData.detail}:null;
   }
   canvas.addEventListener('pointerup',event=>{if(inspector.active||driving.active||!pointerStart||Math.hypot(event.clientX-pointerStart[0],event.clientY-pointerStart[1])>5)return;
-    const node=pickPart(event);if(node)toast(`${node.name} · ${({body:'车身部件',cabin:'座舱部件',chassis:'底盘部件',power:'动力部件'})[node.userData.layer]}`);
+    const hit=pickPart(event);if(hit)toast(`${hit.node.name} · ${({body:'车身部件',cabin:'座舱部件',chassis:'底盘部件',power:'动力部件'})[hit.node.userData.layer]}`);
   });
   canvas.addEventListener('dblclick',event=>{
     if(inspector.active||driving.active)return;
-    const node=pickPart(event);if(!node)return;
-    const id=/轮|制动/.test(node.name)?'wheel':/天窗|全景/.test(node.name)?'roof':/前舱|机盖/.test(node.name)?'hood':/纵向方灯/.test(node.name)?'lamp':/尾|后翼子板|后侧围|后挡|后备箱/.test(node.name)?'rear':'front';
+    const hit=pickPart(event);if(!hit)return;const node=hit.node;
+    const id=hit.detail==='handle'?'handle':/后视镜/.test(node.name)?'mirror':/前侧饰条/.test(node.name)?'sensor':/车顶激光雷达/.test(node.name)?'roof-sensor':/轮胎/.test(node.name)?'tire':/轮毂|制动/.test(node.name)?'wheel':/天窗|全景|行李架/.test(node.name)?'roof':/前舱|机盖/.test(node.name)?'hood':/纵向方灯/.test(node.name)?'lamp':/尾|后翼子板|后侧围|后挡|后备箱/.test(node.name)?'rear':'front';
     inspector.open(id,canvas);
   });
   let touchDistance=0;

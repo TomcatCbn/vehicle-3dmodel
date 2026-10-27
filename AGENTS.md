@@ -72,6 +72,7 @@ blender --background --python scripts/render_aura_t6.py -- --preview --view=trun
 - 可重复生成的脚本是模型维护入口。修改几何后同步更新 `models/aura-t6.blend`、`public/models/aura-t6.glb` 和 `public/models/aura-t6.json`；不要仅手改二进制资产而遗漏生成源。
 - 不直接修改生成的 `dist/`。`output/` 为忽略跟踪的截图与渲染输出目录。
 - 参考照片用于建模与核对，保存在 Blender 隐藏参考集合中，不以车身图片贴片替代可旋转、可开合、可拆解的三维结构。新增外部资产需记录来源和许可。
+- 前后展示牌保持黑底白字 `ID.AURA T6`。用户明确不显示第三方汽车网站广告，参考照片中的广告文字不要照搬到模型或页面。
 - 相邻车身面、灯具和饰件优先共用曲面函数，避免各自偏移后出现裂缝、回折、穿插或不连续反光。对照用户最新照片，同时检查正面和侧面角度。
 - 保持已认可的 VW 徽标共用轮廓；局部车尾调整不要顺带改动已认可的前脸或徽标。
 - GLB 的 `part`、`label`、`layer`、`offset`、`start`、`motion`、`side` 等 extras 是运行时接口。部件名称也用于细节选择与拾取路由，重命名时同步检查消费者和测试。
