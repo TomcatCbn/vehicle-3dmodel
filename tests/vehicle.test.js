@@ -45,3 +45,32 @@ test('layer highlighting restores materials and paint changes imported bodywork'
   vehicle.setColor('#d4c4a5');
   assert.equal(vehicle.parts[0].children[0].material.color.getHexString(),'d4c4a5');
 });
+
+test('explicit low-beam roles preserve authored intensity and switch fully off', () => {
+  const root = new THREE.Group(), part = new THREE.Group();
+  part.userData = { part:true, layer:'body', offset:[0,0,0], start:0 };
+  const material = new THREE.MeshStandardMaterial({emissive:'#ffffff',emissiveIntensity:2.4});
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(.4,.1,.1),material);
+  mesh.userData.lightRole = 'lowBeam';
+  part.add(mesh);root.add(part);
+  const vehicle = createVehicle(root), state = createState();
+  vehicle.update(state,0);
+  assert.equal(mesh.material.emissiveIntensity,2.4);
+  state.lighting.headlights = 'off';
+  vehicle.update(state,0);
+  assert.equal(mesh.material.emissiveIntensity,0);
+});
+
+test('createVehicle controls brake lights from the motion object', () => {
+  const root = new THREE.Group(), part = new THREE.Group();
+  part.userData = { part:true, layer:'body', offset:[0,0,0], start:0 };
+  const material = new THREE.MeshStandardMaterial({emissive:'#ffffff',emissiveIntensity:4});
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(.4,.1,.1),material);
+  mesh.userData.lightRole = 'brakeLight';
+  part.add(mesh);root.add(part);
+  const vehicle = createVehicle(root), state = createState();
+  vehicle.update(state,0);
+  assert.equal(mesh.material.emissiveIntensity,0);
+  vehicle.update(state,0,'all',{wheelAngle:0,braking:true,reversing:false});
+  assert.equal(mesh.material.emissiveIntensity,4);
+});

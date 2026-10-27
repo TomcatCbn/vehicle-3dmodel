@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createDriveState, setDriving, stepDrive, WHEEL_RADIUS } from './drive-state.js';
+import { createDriveState, isBraking, maxDriveSpeed, setDirection, setDriving, stepDrive, WHEEL_RADIUS } from './drive-state.js';
 
 const views={front:[-7,2.6,7.6],side:[-.8,1.8,10.5],rear:[7,2.6,7.6]};
 
@@ -36,13 +36,20 @@ export function createDriving({canvas,camera,controls,scene,getState,resize,onEn
   let active=false,drive=createDriveState(),snapshot,opener,view='front';
   function flushOrbit(){const damping=controls.enableDamping;controls.enableDamping=false;controls.update();controls.enableDamping=damping;}
   function sync(){
-    document.querySelector('#drive-speed').textContent=Math.round(drive.speed);
-    document.querySelector('#drive-distance').textContent=(drive.distance/1000).toFixed(2);
-    document.querySelector('#drive-target').textContent=drive.targetSpeed;
+    const speed=Math.abs(drive.speed),target=Math.abs(drive.targetSpeed),limit=maxDriveSpeed(drive);
+    document.querySelector('#drive-speed').textContent=Math.round(speed);
+    document.querySelector('#drive-distance').textContent=(Math.abs(drive.distance)/1000).toFixed(2);
+    document.querySelector('#drive-target').textContent=target;
     const vehicle=getState(),blocked=vehicle.doorsOpen||vehicle.doorAngle>.01||vehicle.hoodOpen||vehicle.hoodAngle>.01||vehicle.tailgateTarget>.001||vehicle.tailgatePosition>.001||vehicle.plugged;
-    document.querySelector('#drive-status').textContent=drive.running?(drive.speed<drive.targetSpeed-.5?'正在加速':drive.speed>drive.targetSpeed+.5?'正在减速':'行驶中'):drive.speed>.1?'正在停车':blocked?'请关好车门、机盖、尾门并拔枪':'已停稳';
+    document.querySelector('#drive-status').textContent=isBraking(drive)?'正在减速':drive.running?(speed<target-.5?'正在加速':'行驶中'):speed>.1?'正在停车':blocked?'请关好车门、机盖、尾门并拔枪':'已停稳';
     toggle.textContent=drive.running?'停车':'起步';toggle.setAttribute('aria-pressed',String(drive.running));
-    range.style.setProperty('--range-progress',`${drive.targetSpeed}%`);
+    range.max=limit;range.value=target;range.style.setProperty('--range-progress',`${target/limit*100}%`);
+    document.querySelector('#drive-speed-mid').textContent=limit/2;
+    document.querySelector('#drive-speed-max').textContent=`${limit} km/h`;
+    for(const button of document.querySelectorAll('[data-direction]')){
+      const selected=Number(button.dataset.direction)===drive.direction;
+      button.setAttribute('aria-pressed',String(selected));button.disabled=drive.speed!==0;
+    }
   }
   function fit(){
     const direction=new THREE.Vector3(...views[view]);
@@ -71,6 +78,10 @@ export function createDriving({canvas,camera,controls,scene,getState,resize,onEn
   for(const button of document.querySelectorAll('[data-drive-open]')){button.disabled=false;button.addEventListener('click',open);}
   toggle.addEventListener('click',startStop);
   range.addEventListener('input',()=>{drive.targetSpeed=Number(range.value);sync();});
+  for(const button of document.querySelectorAll('[data-direction]'))button.addEventListener('click',()=>{
+    if(setDirection(drive,Number(button.dataset.direction)))sync();
+    else toast('请先停车，待车辆停稳后再切换方向');
+  });
   for(const button of document.querySelectorAll('[data-drive-view]'))button.addEventListener('click',()=>{
     view=button.dataset.driveView;fit();
     for(const other of document.querySelectorAll('[data-drive-view]'))other.setAttribute('aria-pressed',String(other===button));
@@ -88,8 +99,9 @@ export function createDriving({canvas,camera,controls,scene,getState,resize,onEn
   document.addEventListener('visibilitychange',()=>{if(active&&document.hidden){drive.running=false;drive.speed=0;sync();}});
   return {get active(){return active;},stage,refit:fit,
     update(dt){
-      if(!active)return 0;
-      stepDrive(drive,dt);road.update(drive.distance);sync();return (drive.distance/WHEEL_RADIUS)%(Math.PI*2);
+      if(!active)return {wheelAngle:0,braking:false,reversing:false};
+      stepDrive(drive,dt);road.update(drive.distance);sync();
+      return {wheelAngle:(drive.distance/WHEEL_RADIUS)%(Math.PI*2),braking:isBraking(drive),reversing:drive.speed<0};
     },
   };
 }

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { explodeOffset } from './state.js';
+import { createVehicleLighting } from './vehicle-lighting.js';
 
 function polymerGrain(){
   const size=64,heights=new Float32Array(size*size),data=new Uint8Array(size*size*4);
@@ -19,7 +20,7 @@ function polymerGrain(){
 
 /** Bind the named, articulated Blender nodes without replacing their authored geometry. */
 export function createVehicle(root) {
-  const parts = [], effects = [], paintMaterials = [], lights = [];
+  const parts = [], effects = [], paintMaterials = [];
   const yAxis = new THREE.Vector3(0,1,0);
   const axle = new THREE.Vector3(0,0,1);
   let serviceGrain;
@@ -62,7 +63,6 @@ export function createVehicle(root) {
         child.receiveShadow = false;
       }
       if (material.name.startsWith('Paint')) paintMaterials.push({material,shade:material.name==='Paint handle cup'?.32:1});
-      if (material.name.includes('LED')) lights.push({material, intensity:material.emissiveIntensity});
       meshes.push({mesh:child, opacity:material.opacity, transparent:material.transparent, depthWrite:material.depthWrite});
     });
     node.userData.base = node.position.clone();
@@ -72,10 +72,12 @@ export function createVehicle(root) {
     node.traverse(child=>{if(child.userData.strut_component)node.userData.strutComponents.push(child);});
     parts.push(node);
   });
+  const lighting=createVehicleLighting(root);
   let lastLayer;
   const rotation = new THREE.Quaternion();
   const hoodRotation=new THREE.Quaternion(),tailgateRotation=new THREE.Quaternion(),hinge=new THREE.Vector3(),moving=new THREE.Vector3(),direction=new THREE.Vector3();
-  function update(state, progress, layer='all', wheelAngle=0) {
+  function update(state, progress, layer='all', motion={}) {
+    const wheelAngle=motion.wheelAngle||0;
     hoodRotation.setFromAxisAngle(axle,-(state.hoodAngle||0)*1.12*(1-progress));
     tailgateRotation.setFromAxisAngle(axle,(state.tailgatePosition||0)*1.45*(1-progress));
     for (const part of parts) {
@@ -122,9 +124,9 @@ export function createVehicle(root) {
       }
     }
     for (const effect of effects) effect.visible = progress<.12 && (effect.userData.effect==='cable' ? state.plugged : state.ac);
-    for (const {material,intensity} of lights) material.emissiveIntensity = state.lights ? intensity : .05;
+    lighting.update(state,motion);
     lastLayer = layer;
   }
   function setColor(color) { for (const {material,shade} of paintMaterials) material.color.set(color).multiplyScalar(shade); }
-  return {root,parts,update,setColor};
+  return {root,parts,update,setColor,lighting};
 }

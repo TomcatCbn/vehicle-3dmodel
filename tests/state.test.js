@@ -2,6 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createState, stepVehicle, setCharging, explodeOffset } from '../src/state.js';
 
+test('vehicle state has independent lighting defaults and no legacy lights flag', () => {
+  const first = createState();
+  const second = createState();
+  assert.deepEqual(first.lighting, { headlights: 'low', tailLights: true, ambient: 'off' });
+  assert.notStrictEqual(first.lighting, second.lighting);
+  assert.equal(Object.hasOwn(first, 'lights'), false);
+});
+
 test('windows move toward a requested position without overshooting', () => {
   const state = createState();
   state.windowTarget = 1;

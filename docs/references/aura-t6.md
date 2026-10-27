@@ -196,3 +196,7 @@ https://pano.autohome.com.cn/car/ext/77144#pvareaid=3454451
 实际 GLB 回归检查镜片朝向，以及镜片中央和下部的射线首先命中镜片，避免底座挡住镜面；两个回归在修改前分别复现旧朝向与粗底座问题。另保留镜头饰圈贴合下缘倒角的检查。新增 `mirror-rear` 隔离渲染角度核对反面。单张照片无法确认所有背面细节和光学参数，仍按照片近似重建。
 
 最终核对：37/37 测试、生产构建、Python 语法检查和差异检查通过。查看同源 `aura-t6-detail-mirror.png`、`aura-t6-detail-mirror-rear.png`、`aura-t6-detail-front-quarter.png`，并在 1280×900、390×844 浏览器中检查近景、隔离旋转到镜片背面、缩放和重置；拆解到 100% 后复位正常，应用错误日志为空，临时视口已恢复。页面证据保存为 `output/playwright/aura-mirror-wedge-desktop.png`、`aura-mirror-wedge-mobile.png`、`aura-mirror-wedge-rotated.png`、`aura-mirror-wedge-exploded.png`。未进行实体手机性能或镜面光学实测。
+
+## 灯光功能整合（2026-10-27）
+
+在上述外观资产上整合独立的近光、远光、尾灯、制动灯、倒车灯和车内氛围灯角色，保持 99 个总成。新增的白色倒车灯和座舱灯带用于演示状态联动，位置、灯具分工和配光均未得到原厂资料确认，不应视为照片校准结果。头灯投射与座舱补光不生成动态阴影；车型牌继续保持黑底白字 `ID.AURA T6`。整合审查与实际验证记录见 `docs/reviews/2026-10-27-vehicle-lighting.md`。

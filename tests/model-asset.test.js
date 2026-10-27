@@ -244,7 +244,7 @@ test('all four wheel assemblies turn around their authored axle and restore when
   assert.equal(wheels.length,8);
   const brakes=vehicle.parts.filter(part=>part.name.endsWith('制动盘'));
   const angle=Math.PI/3;
-  vehicle.update(state,0,'all',angle);
+  vehicle.update(state,0,'all',{wheelAngle:angle});
   for(const wheel of wheels){
     assert.ok(wheel.position.distanceTo(wheel.userData.base)<1e-8);
     const up=new THREE.Vector3(0,1,0).applyQuaternion(wheel.quaternion);
@@ -359,5 +359,78 @@ test('tailgate electric struts keep their moving sockets attached through the fu
       const tip=support.userData.strutComponents.find(node=>node.userData.strut_component==='tip');
       assert.ok(tip.getWorldPosition(new THREE.Vector3()).distanceTo(expected)<1e-5);
     }
+  }
+});
+
+test('production lamps expose independent runtime roles and paired anchors',async()=>{
+  const scene=(await loadModel()).scene;
+  scene.updateMatrixWorld(true);
+  const expectedCounts={lowBeam:6,highBeam:2,tailLight:5,brakeLight:4,reverseLight:2,ambientLight:2,chargeIndicator:1};
+  const expectedAssociations=[
+    {role:'lowBeam',part:'front_light_bar',count:4,strength:1},
+    {role:'lowBeam',part:'headlight_-1',count:1,strength:3,name:'Lower'},
+    {role:'lowBeam',part:'headlight_1',count:1,strength:3,name:'Lower'},
+    {role:'highBeam',part:'headlight_-1',count:1,strength:5,name:'Upper'},
+    {role:'highBeam',part:'headlight_1',count:1,strength:5,name:'Upper'},
+    {role:'tailLight',part:'tail_lights',count:1,strength:1},
+    {role:'tailLight',part:'outer_tail_lamp_-1',count:2,strength:1},
+    {role:'tailLight',part:'outer_tail_lamp_1',count:2,strength:1},
+    {role:'brakeLight',part:'tail_lights',count:1,strength:5,name:'Ruby'},
+    {role:'brakeLight',part:'outer_tail_lamp_-1',count:1,strength:5,name:'Ruby'},
+    {role:'brakeLight',part:'outer_tail_lamp_1',count:1,strength:5,name:'Ruby'},
+    {role:'brakeLight',part:'rear_spoiler',count:1,strength:5,name:'High'},
+    {role:'reverseLight',part:'rear_bumper',count:2,strength:3},
+    {role:'ambientLight',part:'dashboard',count:2,strength:1.5},
+    {role:'chargeIndicator',part:'charge_cable',count:1,strength:2},
+  ];
+  const roleMeshes=new Map(Object.keys(expectedCounts).map(role=>[role,[]]));
+  const anchors={headlight:[],ambient:[]},materialRoles=new Map();
+  const partOf=node=>{
+    for(let parent=node.parent;parent;parent=parent.parent)if(Object.hasOwn(parent.userData,'part'))return parent;
+  };
+  scene.traverse(node=>{
+    if(node.isMesh&&node.userData.lightRole){
+      const role=node.userData.lightRole;
+      assert.ok(roleMeshes.has(role),`unexpected lamp role ${role}`);
+      roleMeshes.get(role).push(node);
+      if(!materialRoles.has(node.material))materialRoles.set(node.material,new Set());
+      materialRoles.get(node.material).add(role);
+    }
+    if(node.userData.lightAnchor in anchors)anchors[node.userData.lightAnchor].push(node);
+  });
+  for(const [role,meshes] of roleMeshes)assert.equal(meshes.length,expectedCounts[role],`${role} mesh count`);
+  for(const {role,part,count,strength,name} of expectedAssociations){
+    const meshes=roleMeshes.get(role).filter(mesh=>partOf(mesh)?.name===part);
+    assert.equal(meshes.length,count,`${role} meshes under ${part}`);
+    for(const mesh of meshes){
+      if(name)assert.ok(mesh.name.includes(name),`${mesh.name} identifies its ${role} optics`);
+      assert.ok(mesh.material.emissiveIntensity>0,`${mesh.name} has authored emission`);
+      assert.equal(mesh.material.emissiveIntensity,strength,`${mesh.name} emissive intensity under ${part}`);
+    }
+  }
+  for(const [material,roles] of materialRoles)assert.equal(roles.size,1,`${material.name} is shared across lamp roles`);
+  const assertWorldPosition=(position,expected,label)=>{
+    assert.ok(position.toArray().every(Number.isFinite),`${label} has a finite world position`);
+    position.toArray().forEach((value,index)=>assert.ok(Math.abs(value-expected[index])<=1e-4,`${label} ${'xyz'[index]}: expected ${expected[index]}, got ${value}`));
+  };
+  assert.equal(anchors.headlight.length,2);
+  for(const part of ['headlight_-1','headlight_1']){
+    const matches=anchors.headlight.filter(anchor=>anchor.parent.name===part);
+    assert.equal(matches.length,1,`${part} headlight anchor count`);
+    assert.ok(matches[0].parent.userData.part,`${part} anchor has a part parent`);
+    const base=matches[0].parent.getWorldPosition(new THREE.Vector3());
+    const expected=[base.x-.035,base.y-.043,base.z+Math.sign(base.z)*.035];
+    assertWorldPosition(matches[0].getWorldPosition(new THREE.Vector3()),expected,`${part} headlight anchor follows current lamp geometry`);
+  }
+  assert.equal(anchors.ambient.length,2);
+  const ambientPositions=anchors.ambient.map(anchor=>{
+    assert.ok(anchor.parent.userData.part,`${anchor.name} has a part parent`);
+    assert.equal(anchor.parent.name,'dashboard',`${anchor.name} has the dashboard parent`);
+    const position=anchor.getWorldPosition(new THREE.Vector3());
+    assert.ok(position.toArray().every(Number.isFinite),`${anchor.name} has a finite world position`);
+    return position;
+  });
+  for(const expected of [[-.2,1.28,.43],[-.2,1.28,-.43]]){
+    assert.ok(ambientPositions.some(position=>position.toArray().every((value,index)=>Math.abs(value-expected[index])<=1e-4)),`missing ambient anchor at ${expected.join(', ')}`);
   }
 });

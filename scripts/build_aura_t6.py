@@ -68,8 +68,12 @@ alloy = mat('Machined alloy', (.56,.62,.65), .88,.24)
 steel = mat('Structural steel', (.12,.16,.18), .7,.42)
 leather = mat('Ivory upholstery', (.58,.57,.49), 0,.85)
 seat_dark = mat('Seat backs', (.075,.085,.077), 0,.7)
-led = mat('Daylight LED', (.78,.94,1), .2,.22, 3)
-red = mat('Rear light LED', (.8,.018,.025), .1,.25, 2)
+low_beam = mat('Low beam white blue LED', (.78,.94,1), 0,.22, 3)
+high_beam = mat('High beam white blue LED', (.78,.94,1), 0,.22, 5)
+brake_light = mat('Brake red LED', (1,.0225,.03125), 0,.25, 5)
+reverse_light = mat('Reverse white LED', (.92,.96,1), 0,.25, 3)
+ambient_light = mat('Ambient warm LED', (1,.58,.28), 0,.3, 1.5)
+charge_light = mat('Charge green LED', (.025,1,.225), 0,.25, 2)
 reflector_red = mat('Red reflector', (.35,.008,.012), .1,.24)
 cell = mat('Battery modules', (.29,.49,.37), .55,.4)
 screen = mat('Display', (.14,.34,.33), .4,.18,.3)
@@ -118,6 +122,20 @@ def parent(obj, group, material):
     obj.matrix_parent_inverse = group.matrix_world.inverted()
     for poly in obj.data.polygons:
         poly.use_smooth = True
+    return obj
+
+def light_role(obj, role):
+    obj['lightRole'] = role
+    return obj
+
+def light_anchor(name, location, group, role):
+    obj = bpy.data.objects.new(name, None)
+    bpy.context.collection.objects.link(obj)
+    obj.location = location
+    bpy.context.view_layer.update()
+    obj.parent = group
+    obj.matrix_parent_inverse = group.matrix_world.inverted()
+    obj['lightAnchor'] = role
     return obj
 
 def mesh(name, vertices, faces, group, material, thickness=0, bevel=0):
@@ -1087,7 +1105,7 @@ for side in [-1,1]:
         for i in range(n):
             face=(i,i+1,i+n+2,i+n+1)
             fs.append(tuple(reversed(face)) if side>0 else face)
-        mesh(name,vs,fs,lightbar,bar_led)
+        light_role(mesh(name,vs,fs,lightbar,bar_led),'lowBeam')
 for side in [-1,1]:
     lamp_x=front_surface(side*.75,.741)[0]
     lamp=part(f'headlight_{side}',('左' if side>0 else '右')+'纵向方灯','body',(lamp_x,side*.75,.741),(-1.2,side*.12,.18),.12)
@@ -1103,7 +1121,8 @@ for side in [-1,1]:
         bpy.ops.mesh.primitive_uv_sphere_add(segments=32,ring_count=16,location=lp(-.015,.035,dz))
         lens=bpy.context.object;lens.name='Upper projection lens' if dz>0 else 'Lower projection lens'
         lens.scale=(.009,.022,.021 if dz>0 else .015)
-        bpy.ops.object.transform_apply(location=False,rotation=False,scale=True);parent(lens,lamp,optic)
+        bpy.ops.object.transform_apply(location=False,rotation=False,scale=True)
+        light_role(parent(lens,lamp,high_beam if dz>0 else low_beam),'highBeam' if dz>0 else 'lowBeam')
         if dz<0:
             for dy in [-.014,-.005,.005,.014]:
                 tube('Lower collimator facet',[lp(-.022,.035+dy,dz-.010),lp(-.024,.035+dy,dz+.010)],.0008,lamp_chrome,lamp)
@@ -1129,6 +1148,7 @@ for side in [-1,1]:
     mesh('Curved smoked headlamp cover',vs,fs,lamp,lamp_glass)
     slope=(front_surface(side*.75+.001,.741)[0]-front_surface(side*.75-.001,.741)[0])/.002
     lamp.rotation_euler.z=-math.atan(slope)
+    light_anchor('Headlight anchor',lp(-.035,.035,-.043),lamp,'headlight')
 
 windscreen=part('windscreen','前挡风玻璃','cabin',offset=(-.45,0,1.2),start=.18)
 loft('Curved windscreen',[(-1.025,1.103,.868),(-.86,1.265,.825),(-.60,1.475,.780),(-.32,1.60,.740)],windscreen,glass,.022,0)
@@ -1210,7 +1230,7 @@ for side in [-1,1]:
     points=[(1.72,side*.736,1.529),(1.95,side*.768,1.517),(1.94,side*.726,1.430),(1.84,side*.696,1.466)]
     mesh('Spoiler black side endplate',points,[(0,1,2,3)] if side>0 else [(3,2,1,0)],spoiler,black,.006,.002)
 loft('Spoiler dark underside',[(1.76,1.512,.768),(1.955,1.507,.760)],spoiler,black,.006,.005)
-box('High mounted stop lamp',(1.983,0,1.517),(.010,.52,.008),red,spoiler,.003)
+light_role(box('High mounted stop lamp',(1.983,0,1.517),(.010,.52,.008),brake_light,spoiler,.003),'brakeLight')
 box('Rear upper camera housing',(1.94,0,1.499),(.042,.078,.029),black,spoiler,.012)
 cylinder('Rear upper camera lens',(1.966,0,1.499),.010,.005,glass,spoiler,'X',24)
 rear_glass=part('rear_glass','后挡风玻璃','cabin',TAILGATE_HINGE,(.7,0,1.2),.2,'tailgate')
@@ -1365,9 +1385,11 @@ for side in [-1,1]:
 plate_x=rear_surface(0,.555)[0]+.012
 box('Rear license plate',(plate_x,0,.555),(.018,.46,.155),model_plate,rear_bumper,.008)
 text_label('ID.AURA T6',(plate_x+.013,0,.555),.042,rear_bumper,True,plate_lettering)
+for side in [-1,1]:
+    y=side*.62;z=.49
+    light_role(box('White reverse lamp',(rear_surface(y,z)[0]+.024,y,z),(.014,.16,.035),reverse_light,rear_bumper,.006),'reverseLight')
 rear_lights=part('tail_lights','后贯穿尾灯','body',TAILGATE_HINGE,(1.18,0,.27),.12,'tailgate')
 rear_led=mat('Rear fine light guide LED',(.42,.004,.008),0,.3,1.3)
-rear_optic=mat('Rear ruby optical chamber',(.085,.002,.004),.15,.23)
 rear_lens=lamp_glass.copy();rear_lens.name='Rear smoked optical cover'
 rear_lens.node_tree.nodes.get('Principled BSDF').inputs['Base Color'].default_value=(.030,.018,.022,1)
 rear_lens.node_tree.nodes.get('Principled BSDF').inputs['Transmission Weight'].default_value=.64
@@ -1398,14 +1420,15 @@ def rear_band(group,side=None):
         if side is None and abs(vs[i][1])<.075:continue
         face=(i,i+1,i+ny+2,i+ny+1)
         fs.append(face if side is None or side>0 else tuple(reversed(face)))
-    mesh('Single slim red rear light guide',vs,fs,group,rear_led,.001)
-    for z0,z1,name,material in [(1.083,1.096,'Ruby upper tail lamp chamber',rear_optic),(1.032,1.036,'Lower tail lamp separator',black)]:
+    light_role(mesh('Single slim red rear light guide',vs,fs,group,rear_led,.001),'tailLight')
+    for z0,z1,name,material,role in [(1.083,1.096,'Ruby upper tail lamp chamber',brake_light,'brakeLight'),(1.032,1.036,'Lower tail lamp separator',black,'')]:
         vs=[];fs=[]
         for z in [z0,z1]:
             for i in range(ny+1):
                 y=y_value(i/ny*2-1,z);vs.append(rear_point(y,z,.0095))
         for i in range(ny):fs.append((i,i+1,i+ny+2,i+ny+1) if side is None or side>0 else (i+ny+1,i+ny+2,i+1,i))
-        mesh(name,vs,fs,group,material)
+        obj=mesh(name,vs,fs,group,material)
+        if role:light_role(obj,role)
 
 rear_band(rear_lights)
 for side in [-1,1]:
@@ -1433,7 +1456,7 @@ for side in [-1,1]:
             x,w,_=side_surface(1.82+.48*t,z,'rear');vs.append((x,side*(w+.010),z))
     for i in range(n):
         face=(i,i+1,i+n+2,i+n+1);fs.append(face if side<0 else tuple(reversed(face)))
-    mesh('Single tapered side rear light guide',vs,fs,outer,rear_led,.001)
+    light_role(mesh('Single tapered side rear light guide',vs,fs,outer,rear_led,.001),'tailLight')
 
 # The full rear door shares the roof hinge; these narrow frames move with its glass.
 for side in [-1,1]:
@@ -1496,6 +1519,9 @@ box('Dashboard',(-.83,0,1.04),(.35,1.52,.17),black,dash,.055)
 box('Center display',(-.63,0,1.19),(.023,.42,.25),black,dash,.015)
 box('Display surface',(-.614,0,1.19),(.006,.39,.22),screen,dash,.005)
 box('Driver display',(-.74,.46,1.16),(.04,.3,.12),black,dash,.015)
+for side in [-1,1]:
+    light_role(box('Dashboard ambient strip',(-.48,side*.48,1.0),(.025,.50,.012),ambient_light,dash,.006),'ambientLight')
+    light_anchor('Dashboard ambient anchor',(-.20,side*.43,1.28),dash,'ambient')
 steering=part('steering','方向盘','cabin',(-.5,.47,1.08),(-.2,.1,.7),.33)
 ring('Steering wheel',(-.5,.47,1.08),.13,black,steering,'X',.018)
 box('Steering center',(-.49,.47,1.07),(.055,.11,.065),black,steering,.015)
@@ -1536,7 +1562,7 @@ cable=part('charge_cable','充电枪','body',motion='cable')
 cable['part']=False;cable['effect']='cable'
 tube('Charge cable',[(1.74,.99,1.0),(1.9,1.3,.7),(1.95,1.65,.05),(1.3,1.95,.025),(.6,1.98,.025)],.022,black,cable)
 box('Charge connector',(1.74,1.0,.99),(.14,.21,.09),black,cable,.028)
-box('Charge indicator',(1.74,1.025,1.04),(.08,.12,.01),led,cable,.004)
+light_role(box('Charge indicator',(1.74,1.025,1.04),(.08,.12,.01),charge_light,cable,.004),'chargeIndicator')
 air=part('airflow','空调气流','cabin',motion='airflow')
 air['part']=False;air['effect']='airflow'
 for side in [-1,0,1]:

@@ -1,6 +1,8 @@
+import { createLightingState } from './lighting-state.js';
+
 export const clamp = (value, min = 0, max = 1) => Math.min(max, Math.max(min, value));
 export function createState() {
-  return { locked: true, doorsOpen: false, doorAngle: 0, hoodOpen: false, hoodAngle: 0, sunroofTarget:0, sunroofPosition:0, tailgateTarget:0, tailgatePosition:0, windowTarget: 0, windowOpen: 0, ac: false, temperature: 22, plugged: false, charging: false, battery: 68, lights: true };
+  return { locked: true, doorsOpen: false, doorAngle: 0, hoodOpen: false, hoodAngle: 0, sunroofTarget:0, sunroofPosition:0, tailgateTarget:0, tailgatePosition:0, windowTarget: 0, windowOpen: 0, ac: false, temperature: 22, plugged: false, charging: false, battery: 68, lighting: createLightingState() };
 }
 export function stepVehicle(state, dt) {
   dt=Number.isFinite(dt)?Math.max(0,dt):0;
