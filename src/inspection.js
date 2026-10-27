@@ -9,7 +9,7 @@ export const INSPECTION_VIEWS=[
   {id:'lamp',label:'车灯',description:'右侧主灯的透镜与反射饰板',direction:[-1,.05,.35],isolated:true},
   {id:'badge',label:'车标',description:'前车标的字面、外环与底座',direction:[-1,.27,.03],isolated:true},
   {id:'wheel',label:'轮毂',description:'右前轮毂、轮胎与制动结构',direction:[.10,.10,1],isolated:true},
-  {id:'mirror',label:'后视镜',description:'曲面上下壳、细棱灯条与底部镜头',direction:[-.65,.22,1]},
+  {id:'mirror',label:'后视镜',description:'弧顶楔形镜壳、嵌缝灯条与下缘镜头',direction:[-.65,.14,1]},
   {id:'sensor',label:'翼子板感知',description:'楔形壳体、凹槽与镜头细节',direction:[-.15,.18,1]},
   {id:'roof-sensor',label:'车顶感知',description:'低矮曲面外壳与前侧光学窗口',direction:[-1,.65,.65]},
   {id:'tire',label:'轮胎',description:'圆润胎肩、胎侧字样、模压细纹与胎面',direction:[.1,.12,1],isolated:true},

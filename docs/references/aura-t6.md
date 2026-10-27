@@ -185,3 +185,14 @@ https://pano.autohome.com.cn/car/ext/77144#pvareaid=3454451
 最终验证：36/36 测试、生产构建及差异空白检查通过。实际 GLB 回归同时覆盖下部开放、上方间隙遮挡、轮组转动和拆解复位。Cycles 核对 `aura-t6-detail-wheel.png`、`aura-t6-detail-front-quarter.png`；浏览器核对 1280×900、390×844、轮组近景及拆解 100% 后复位，应用错误日志为空，临时视口已恢复。截图为 `output/playwright/aura-wheel-cavity-before.png`、`aura-wheel-cavity-after.png`、`aura-wheel-cavity-mobile.png` 和 `aura-wheel-cavity-assembled.png`。
 
 此前六处近照校准也已同步到最终 Blender/GLB：后视镜饰圈轴向经失败回归后修正，轮毂五处窗口与车顶设备/天窗行程均有实际资产回归；新增十二处近景入口的桌面、手机取景与隔离恢复已核对。外观仍为照片近似，未进行实体手机性能实测。
+
+
+## 后视镜轮廓重建（2026-10-27）
+
+用户指出上一版还原度低，继续使用 `models/references/aura-mirror-user.png` 核对。旧结构沿车辆纵轴对椭圆截面放样，使外壳偏鼓、镜面朝向不合理，底座过粗；更换为斜向前外侧的局部基准面，镜片朝后且朝内。
+
+上盖采用弧顶楔形轮廓，下壳有收窄的底缘；前面与肩部共用边缘顶点，连续法线消除前盖上不应有的内圈折痕。上盖使用独立的黑色非金属材质，避免改变轮毂和行李架。嵌缝灯条分为黑色灯槽、烟色灯罩和细棱；下缘倒角面保留倾斜嵌入的镜头，缩窄下移的支颈与门侧底座连续连接。后视镜仍属于原来的左右独立总成，未添加折叠执行机构。
+
+实际 GLB 回归检查镜片朝向，以及镜片中央和下部的射线首先命中镜片，避免底座挡住镜面；两个回归在修改前分别复现旧朝向与粗底座问题。另保留镜头饰圈贴合下缘倒角的检查。新增 `mirror-rear` 隔离渲染角度核对反面。单张照片无法确认所有背面细节和光学参数，仍按照片近似重建。
+
+最终核对：37/37 测试、生产构建、Python 语法检查和差异检查通过。查看同源 `aura-t6-detail-mirror.png`、`aura-t6-detail-mirror-rear.png`、`aura-t6-detail-front-quarter.png`，并在 1280×900、390×844 浏览器中检查近景、隔离旋转到镜片背面、缩放和重置；拆解到 100% 后复位正常，应用错误日志为空，临时视口已恢复。页面证据保存为 `output/playwright/aura-mirror-wedge-desktop.png`、`aura-mirror-wedge-mobile.png`、`aura-mirror-wedge-rotated.png`、`aura-mirror-wedge-exploded.png`。未进行实体手机性能或镜面光学实测。

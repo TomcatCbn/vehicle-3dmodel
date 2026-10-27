@@ -209,14 +209,32 @@ test('the roof sensor stays on the fixed header clear of the full sliding glass 
   }
 });
 
-test('mirror camera retaining rings lie flush on the underside rather than hanging vertically',async()=>{
+test('mirror camera retaining rings follow the shallow underside bevel rather than hanging vertically',async()=>{
   const vehicle=createVehicle((await loadModel()).scene);
   vehicle.update(createState(),0);vehicle.root.updateMatrixWorld(true);
   for(const part of vehicle.parts.filter(part=>part.name.endsWith('后视镜'))){
     const bezel=part.children.find(node=>node.name.startsWith('Mirror_underside_camera_bezel'));
     assert.ok(bezel);
     const size=new THREE.Box3().setFromObject(bezel).getSize(new THREE.Vector3());
-    assert.ok(size.y<.003&&size.x>.017&&size.z>.017,'camera bezel must lie horizontally beneath the shell');
+    assert.ok(size.y<.011&&size.x>.014&&size.z>.014,'camera bezel must stay close to the shallow underside bevel');
+  }
+});
+
+test('mirror glass faces rearward and toward the driver rather than straight along the car axis',async()=>{
+  const vehicle=createVehicle((await loadModel()).scene);
+  vehicle.update(createState(),0);vehicle.root.updateMatrixWorld(true);
+  for(const part of vehicle.parts.filter(part=>part.name.endsWith('后视镜'))){
+    const glass=part.children.find(node=>node.name.startsWith('Mirror_reflective_glass'));
+    assert.ok(glass);
+    const normal=new THREE.Vector3().fromBufferAttribute(glass.geometry.getAttribute('normal'),0).applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(glass.matrixWorld));
+    const out=new THREE.Vector3(0,0,part.name.startsWith('右')?1:-1);
+    assert.ok(normal.x>.35&&normal.dot(out)<-.4,'rear-facing mirror should angle inward toward the driver');
+    const centre=new THREE.Vector3().fromBufferAttribute(glass.geometry.getAttribute('position'),0).applyMatrix4(glass.matrixWorld);
+    for(const dy of [0,-.033]){
+      const target=centre.clone().add(new THREE.Vector3(0,dy,0));
+      const ray=new THREE.Raycaster(target.addScaledVector(normal,.40),normal.clone().negate());
+      assert.ok(ray.intersectObject(part,true)[0]?.object===glass,'mounting neck must not obstruct the central/lower mirror surface');
+    }
   }
 });
 

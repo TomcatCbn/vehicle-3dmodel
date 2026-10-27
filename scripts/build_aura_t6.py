@@ -52,7 +52,13 @@ tire_letter = mat('Moulded tire lettering', (.011,.012,.013), 0,.76)
 mirror_cap = mat('Mirror gloss black cap', (.005,.007,.009), .08,.28)
 mirror_cap.node_tree.nodes.get('Principled BSDF').inputs['Coat Weight'].default_value=.45
 sensor_black = mat('Sensor satin housing', (.006,.008,.010), .06,.37)
-indicator_lens = mat('Mirror indicator clear ribs', (.29,.33,.35), .12,.19)
+indicator_lens = mat('Mirror indicator smoked cover', (.09,.11,.12), 0,.16)
+indicator_lens.node_tree.nodes.get('Principled BSDF').inputs['Transmission Weight'].default_value=.28
+mirror_shell = mat('Mirror satin black upper cap', (.004,.005,.006), 0,.30)
+mirror_shell.node_tree.nodes.get('Principled BSDF').inputs['Coat Weight'].default_value=.32
+mirror_shell.node_tree.nodes.get('Principled BSDF').inputs['Coat Roughness'].default_value=.27
+mirror_lower = mat('Mirror moulded lower housing', (.004,.005,.006), 0,.47)
+mirror_ribs = mat('Mirror indicator optical prisms', (.24,.27,.28), 0,.26)
 mirror_glass = mat('Mirror reflective glass', (.38,.45,.48), .98,.07)
 sensor_optic = mat('Sensor optical glass', (.008,.015,.020), .08,.09)
 sensor_optic.node_tree.nodes.get('Principled BSDF').inputs['Coat Weight'].default_value=.8
@@ -590,44 +596,113 @@ for side in [-1,1]:
             d_fs.append((k,k+1,k+n+2,k+n+1) if side<0 else (k,k+n+1,k+n+2,k+1))
     mesh('Swept rear D pillar',d_vs,d_fs,pillar_c,paint,.008)
     mirror=part(f'mirror_{side}',label+'后视镜','body',(-.87,side*.99,1.12),(-.15,side*1.3,.25),.1)
-    # Two continuous shells share the indicator seam; the rear opening carries a mirror face.
-    mirror_sections=[(-1.005,.002,.002),(-.992,.060,.028),(-.960,.109,.052),(-.90,.139,.068),(-.82,.140,.066),(-.735,.117,.047)]
-    mirror_w=section([(x,w) for x,w,h in mirror_sections]);mirror_h=section([(x,h) for x,w,h in mirror_sections])
-    def mirror_point(x,a,extra=0):
-        c=math.cos(a);sn=math.sin(a)
-        return (x,side*(1.047+(mirror_w(x)+extra)*math.copysign(abs(c)**.82,c)),1.151+.022*(x+.9)+(mirror_h(x)+extra)*math.copysign(abs(sn)**.82,sn)*(1 if sn>=0 else .65))
-    for name,begin,material in [('Mirror upper crowned shell',0,mirror_cap),('Mirror lower satin shell',math.pi,sensor_black)]:
-        vs=[];fs=[];nx=56;na=32
-        for i in range(nx+1):
-            x=-1.005+.270*i/nx
-            for j in range(na+1):vs.append(mirror_point(x,begin+math.pi*j/na))
-        for i in range(nx):
-            for j in range(na):
-                k=i*(na+1)+j;face=(k,k+na+1,k+na+2,k+1)
+    # The cover faces diagonally forward/outboard; the glass faces rearward/inboard.
+    mirror_origin=Vector((-.875,side*1.092,1.155))
+    mirror_u=Vector((.82,side*.57236,0)).normalized()
+    mirror_n=Vector((-.57236,side*.82,0)).normalized()
+    def mirror_point(u,z,depth):return tuple(mirror_origin+mirror_u*u+Vector((0,0,z))+mirror_n*depth)
+    def mirror_outline(start,segments):
+        points=[];p0=Vector(start)
+        for c1,c2,end in segments:
+            c1,c2,end=Vector(c1),Vector(c2),Vector(end)
+            for i in range(24):
+                t=i/24;points.append(p0*(1-t)**3+c1*(3*(1-t)**2*t)+c2*(3*(1-t)*t*t)+end*t**3)
+            p0=end
+        return points
+    def mirror_edge_depth(u):return .0025*max(0,1-(u/.148)**2)
+    def mirror_seam(u):return -.006*(1-((u-.0015)/.1455)**2)
+    def mirror_rear_z(z):return z*(.65 if z>0 else .90)
+    upper=mirror_outline((-.144,0),[
+        ((-.047,-.008),(.050,-.008),(.147,0)),
+        ((.139,.020),(.077,.086),(.012,.087)),
+        ((-.040,.088),(-.123,.038),(-.144,.006)),
+        ((-.146,.004),(-.146,.002),(-.144,0)),
+    ])
+    lower=mirror_outline((-.144,-.006),[
+        ((-.145,-.025),(-.133,-.051),(-.105,-.056)),
+        ((-.055,-.064),(.077,-.064),(.100,-.052)),
+        ((.132,-.039),(.147,-.019),(.147,-.006)),
+        ((.050,-.014),(-.047,-.014),(-.144,-.006)),
+    ])
+    def mirror_shell_surface(name,boundary,center,material,crown):
+        center=Vector(center);count=len(boundary);vs=[mirror_point(center.x,center.y,mirror_edge_depth(center.x)+crown)];fs=[];rows=24
+        for row in range(1,rows+1):
+            r=row/rows
+            for p0 in boundary:
+                q=center.lerp(p0,r)
+                vs.append(mirror_point(q.x,q.y,mirror_edge_depth(q.x)+crown*math.sqrt(max(0,1-r*r))))
+            for i in range(count):
+                k=1+(row-1)*count+i;q=1+(row-1)*count+(i+1)%count
+                face=(0,k,q) if row==1 else (k-count,k,q,q-count)
                 fs.append(face if side<0 else tuple(reversed(face)))
-        mesh(name,vs,fs,mirror,material,.002)
-    stem=[(-.96,side*.895,1.112),(-.79,side*.909,1.096),(-.76,side*1.038,1.115),(-.91,side*1.062,1.126),
-          (-.96,side*.895,1.148),(-.79,side*.909,1.125),(-.76,side*1.038,1.146),(-.91,side*1.062,1.153)]
-    mesh('Mirror sculpted mounting foot',stem,[(0,3,2,1),(4,5,6,7),(0,1,5,4),(1,2,6,5),(2,3,7,6),(3,0,4,7)],mirror,sensor_black,bevel=.012)
-    # Glass occupies the rear-facing opening instead of a thick rectangular block.
-    vs=[(-.730,side*1.047,1.151)];outline=[]
-    for i in range(96):
-        a=i/96*math.tau;q=Vector(mirror_point(-.735,a));q.x=-.731
-        q.y=side*1.047+(q.y-side*1.047)*.94;q.z=1.151+(q.z-1.151)*.91
-        outline.append(tuple(q))
-    vs+=outline;faces=[(0,i+1,(i+1)%96+1) for i in range(96)]
-    mesh('Mirror reflective glass',vs,[tuple(reversed(f)) for f in faces] if side<0 else faces,mirror,mirror_glass)
-    tube('Mirror glass perimeter gasket',outline,.0022,sensor_black,mirror,True)
-    seam=[mirror_point(-1.0+.252*i/64,0,.001) for i in range(65)]
-    tube('Mirror indicator dark channel',seam,.0034,sensor_black,mirror)
-    tube('Mirror indicator clear light guide',seam,.0019,indicator_lens,mirror)
-    for i in range(62):
-        x=-.987+.237*i/61;q=Vector(mirror_point(x,0,.0028))
-        tube('Mirror indicator prism rib',[tuple(q+Vector((0,0,-.002))),tuple(q+Vector((0,0,.002)))],.00035,indicator_lens,mirror)
-    merge_static_details(mirror,'Mirror indicator prism rib',indicator_lens)
-    cylinder('Mirror underside camera socket',(-.88,side*1.13,1.116),.012,.006,sensor_black,mirror,'Z',40)
-    cylinder('Mirror underside camera lens',(-.88,side*1.13,1.112),.0078,.002,sensor_optic,mirror,'Z',40)
-    ring('Mirror underside camera bezel',(-.88,side*1.13,1.112),.0095,black,mirror,'Z',.0008)
+        # Share the edge vertices so the cap rolls into the shoulder without an inset seam.
+        previous=1+(rows-1)*count
+        for row in range(1,25):
+            t=row/24;scale=1-.08*t;start=len(vs)
+            for q in boundary:vs.append(mirror_point(q.x*scale,q.y*(1-t)+mirror_rear_z(q.y)*t,mirror_edge_depth(q.x)*(1-t)-.092*t))
+            for i in range(count):
+                j=(i+1)%count;face=(previous+i,start+i,start+j,previous+j)
+                fs.append(face if side<0 else tuple(reversed(face)))
+            previous=start
+        mesh(name,vs,fs,mirror,material)
+    mirror_shell_surface('Mirror upper wedge cap',upper,(-.006,.029),mirror_shell,.018)
+    mirror_shell_surface('Mirror lower sculpted housing',lower,(-.004,-.030),mirror_lower,.012)
+    # Curved support neck grows from the door gasket into the lower housing.
+    foot_rows=[(.899,-.812,1.079,.043,.020),(.917,-.816,1.081,.044,.019),(.955,-.832,1.086,.041,.016),(.999,-.855,1.097,.035,.014),(1.038,-.880,1.111,.032,.014)]
+    foot_sections=[section([(r[0],r[j]) for r in foot_rows]) for j in range(1,5)]
+    vs=[];fs=[];nc=48;nx=48
+    for row in range(nx+1):
+        y=.899+.139*row/nx;cx,cz,rx,rz=[fn(y) for fn in foot_sections]
+        for i in range(nc):
+            a=i/nc*math.tau;c,sn=math.cos(a),math.sin(a)
+            vs.append((cx+rx*math.copysign(abs(c)**.70,c),side*y,cz+rz*math.copysign(abs(sn)**.75,sn)))
+    for row in range(nx):
+        for i in range(nc):
+            k=row*nc+i;q=row*nc+(i+1)%nc;face=(k,q,q+nc,k+nc)
+            fs.append(face if side<0 else tuple(reversed(face)))
+    face=tuple(range(nc));fs.append(face if side>0 else tuple(reversed(face)))
+    mesh('Mirror continuous curved mounting neck',vs,fs,mirror,mirror_lower)
+    gasket=[(x,side*.898,z) for x,y,z in vs[:nc]]
+    tube('Mirror door mounting gasket',gasket,.0016,mirror_lower,mirror,True)
+    perimeter=mirror_outline((-.144,0),[
+        ((-.145,-.025),(-.133,-.051),(-.105,-.056)),
+        ((-.055,-.064),(.077,-.064),(.100,-.052)),
+        ((.132,-.039),(.147,-.019),(.147,0)),
+        ((.139,.020),(.077,.086),(.012,.087)),
+        ((-.040,.088),(-.123,.038),(-.144,.006)),
+        ((-.146,.004),(-.146,.002),(-.144,0)),
+    ])
+    center=Vector((0,.010));outline=[]
+    for q in perimeter:
+        q=center.lerp(Vector((q.x*.92,mirror_rear_z(q.y))),.944)
+        outline.append(mirror_point(q.x,q.y,-.094))
+    vs=[mirror_point(0,.010,-.095)]+outline;count=len(outline)
+    fs=[(0,i+1,(i+1)%count+1) for i in range(count)]
+    mesh('Mirror reflective glass',vs,[tuple(reversed(f)) for f in fs] if side<0 else fs,mirror,mirror_glass)
+    tube('Mirror glass perimeter gasket',outline,.0023,mirror_lower,mirror,True)
+    tube('Mirror rear opening rolled edge',[mirror_point(q.x*.92,mirror_rear_z(q.y),-.093) for q in perimeter],.0022,mirror_shell,mirror,True)
+    def mirror_light_band(name,material,half_height,depth,u0,u1):
+        vs=[];fs=[];n=112
+        for i in range(n+1):
+            u=u0+(u1-u0)*i/n;h=half_height*(.35+.65*math.sin(math.pi*i/n)**.35)
+            for dz in [-h,h]:vs.append(mirror_point(u,mirror_seam(u)-.0036+dz,mirror_edge_depth(u)+depth))
+            if i:
+                k=2*i;face=(k-2,k,k+1,k-1);fs.append(face if side<0 else tuple(reversed(face)))
+        mesh(name,vs,fs,mirror,material,.0007)
+    mirror_light_band('Mirror indicator recessed black channel',mirror_lower,.0041,.0005,-.142,.145)
+    mirror_light_band('Mirror indicator continuous smoked lens',indicator_lens,.0027,.0014,-.139,.141)
+    for i in range(140):
+        u=-.137+.276*i/139;h=.0023*(.35+.65*math.sin(math.pi*i/139)**.35)
+        tube('Mirror indicator prism rib',[mirror_point(u,mirror_seam(u)-.0036+dz,mirror_edge_depth(u)+.0022) for dz in [-h,h]],.00027,mirror_ribs,mirror)
+    merge_static_details(mirror,'Mirror indicator prism rib',mirror_ribs)
+    tube('Mirror lower housing mould joint',[mirror_point(u,mirror_seam(u)-.015,mirror_edge_depth(u)+.004) for u in [-.138+.277*i/96 for i in range(97)]],.0005,mirror_lower,mirror)
+    camera_normal=(mirror_n*.35-Vector((0,0,.94))).normalized()
+    camera_center=Vector(mirror_point(-.065,-.052,.011))
+    for name,r,depth,offset,material in [('Mirror underside camera socket',.0105,.004,0,mirror_lower),('Mirror underside camera lens',.0068,.0015,.0023,sensor_optic)]:
+        obj=cylinder(name,tuple(camera_center+camera_normal*offset),r,depth,material,mirror,'Z',48)
+        obj.rotation_euler=camera_normal.to_track_quat('Z','Y').to_euler()
+    camera_up=camera_normal.cross(mirror_u).normalized()
+    tube('Mirror underside camera bezel',[tuple(camera_center+camera_normal*.002+(.0088*(mirror_u*math.cos(i/72*math.tau)+camera_up*math.sin(i/72*math.tau)))) for i in range(72)],.0007,mirror_shell,mirror,True)
     vent=part(f'side_vent_{side}',label+'前侧饰条','body',(-1.06,side*.944,1.01),(-.2,side*.55,.12),.1)
     contour=rounded_outline([(-1.23,0,1.055),(-.952,0,1.037),(-.973,0,.982),(-1.173,0,1.004)],.008)
     def fender_point(x,z,depth):return (x,side*(side_width(x,z)+depth),z)
