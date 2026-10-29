@@ -314,6 +314,7 @@ async function startScene(){
   addEventListener('scroll',readScroll,{passive:true});readScroll();
   for(const button of document.querySelectorAll('[data-view]'))button.addEventListener('click',()=>{view=button.dataset.view;manualCamera=false;document.querySelectorAll('[data-view]').forEach(node=>{node.classList.toggle('selected',node===button);node.setAttribute('aria-pressed',String(node===button));});});
   $('#reset-camera').addEventListener('click',()=>{manualCamera=false;view='perspective';controls.target.set(0,.7,0);document.querySelector('[data-view="perspective"]').click();});
+  $('#replay-intro').addEventListener('click',()=>{manualCamera=false;vehicle.root.position.z=-30;vehicle.root.rotation.y=.2;introActive=true;});
   for(const button of document.querySelectorAll('[data-color]'))button.addEventListener('click',()=>{vehicle.setColor(button.dataset.color);$('#color-name').textContent=button.getAttribute('aria-label');document.querySelectorAll('[data-color]').forEach(node=>{node.classList.toggle('selected',node===button);node.setAttribute('aria-pressed',String(node===button));});});
   for(const button of document.querySelectorAll('[data-layer]'))button.addEventListener('click',()=>{layer=button.dataset.layer;document.querySelectorAll('[data-layer]').forEach(node=>node.classList.toggle('selected',node===button));});
   const raycaster=new THREE.Raycaster();const pointer=new THREE.Vector2();let pointerStart=null;
