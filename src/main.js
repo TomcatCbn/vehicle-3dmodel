@@ -227,9 +227,8 @@ async function startScene(){
     onExit(){manualCamera=previousManual;readScroll();},
     onIsolate(value,box){studio.setIsolated(value,box);},
     onSelect(id){
-      // Visual preparation for detail view — directly set mirror for immediacy.
-      if(id==='hood'&&!state.hood.open){state.hood.open=true;state.hood.angle=1;sendCommand({type:'toggle_hood'});}
-      if(id==='handle'){const anyOpen=Object.values(state.doors).some(d=>d.open);for(const door of Object.values(state.doors))door.angle=anyOpen?1:0;}
+      // M2: route through backend command — no direct state mutation.
+      if(id==='hood'&&!state.hood.open)sendCommand({type:'toggle_hood'});
       vehicle.update(state,0,'all');
     },
   });
@@ -240,7 +239,7 @@ async function startScene(){
   });
   for(const button of document.querySelectorAll('[data-hood-toggle]')){button.disabled=false;button.addEventListener('click', async ()=>{
     await sendCommand({type:'toggle_hood'});
-    if(inspector.active){state.hood.angle=state.hood.open?1:0;vehicle.update(state,0,'all');inspector.refresh();}
+    if(inspector.active)inspector.refresh();
   });}
   function resize(){
     const rect=inspector.active?inspector.stage.getBoundingClientRect():driving.active?driving.stage.getBoundingClientRect():{width:innerWidth,height:innerHeight};
