@@ -4,9 +4,11 @@
 
 ## 项目定位
 
-- AXIS Vehicle Lab：基于大众 ID. AURA T6 照片近似重建的可交互三维车辆，支持车控、细节查看、滚动拆解和直线行驶演示。
-- 技术栈为原生 JavaScript ES Modules、Three.js 和 Vite；测试使用 Node.js 内置 `node:test`，模型由 Blender Python 脚本生成。
-- 当前仅有浏览器本地状态，刷新会复位，MQTT/BLE 尚未接入。不要将界面动作或动画描述为已完成真实协议联调。
+- **项目大目标**：维护一个车信号模拟器，完成远控（MQTT）、蓝牙（BLE RKE）等一切车端功能，扮演一辆真实车的角色。可被手机 BLE 连接鉴权并执行车控，可连上车管后台 MQTT broker 接收远控指令并回传状态。支持 Windows 与 macOS 双平台。
+- 技术栈：Tauri 2.0 + Rust 后端负责信号状态机与联动校验；前端原生 JavaScript ES Modules + Three.js + Vite 负责三维渲染与交互；模型由 Blender Python 脚本生成。测试使用 Node.js 内置 `node:test`（前端）和 `cargo test`（Rust）。
+- 三维模型基于大众 ID. AURA T6 照片近似重建，支持车控、细节查看、滚动拆解和直线行驶演示。现有 Three.js 渲染管线是长期投资，不重写。
+- 当前架构：前端通过 Tauri invoke 将车控指令发往后端 SignalModel，后端 tick 循环推进状态并广播快照，前端 followSnapshot 做双值插值。浏览器模式下回退到 applyLocalCommand 本地执行。
+- BLE 和 MQTT 尚未接入真实协议。不要将界面动作或动画描述为已完成真实协议联调。
 - 外观为照片近似，座舱、底盘、货厢和开合机构包含示意结构，不能据此推断原厂工程尺寸、配置、光学或车辆动力学。
 
 ## 代码与资产入口
@@ -71,6 +73,14 @@ blender --background --python scripts/render_aura_t6.py -- --preview --view=trun
 - 整车、细节和行驶视图复用同一模型、canvas、renderer 与动画循环；切换视图时恢复相机、可见性和交互设置，避免创建重复场景或循环。
 - 保留当前联动：解锁后才能开门，关门后才能上锁，插枪后才能充电；车门、机盖、尾门未关拢或充电枪连接时禁止起步，天窗可保持开启行驶。
 - 保留键盘操作、可访问名称、控件状态反馈和窄屏布局；视口模拟不等同于实体手机触控验证。
+
+## 提交规范
+
+- **分支策略**：新功能拉 `feature/<简述>` 分支，修复问题拉 `bugfix/<简述>` 分支，改完向 `main` 提 MR。不要直接向 `main` 推送。
+- **决策记录**：任何架构或行为变更需在 `docs/decision/` 下留下讨论决策方案（编号延续现有文件，如 `06-xxx.md`）。决策文档应记录背景、选项、结论和影响，而非仅写最终结果。
+- **提交信息**：使用简体中文描述，格式为 `<类型>(<范围>): <简述>`。类型如 `feat`/`fix`/`refactor`/`docs`/`test`/`chore`，范围可选。
+- **测试先行**：逻辑变更需先跑 `npm test` 和 `cargo test`（涉及 Rust 时），全部通过后再提交。
+- **资产同步**：几何修改需同步生成脚本、GLB 和 JSON，不要仅手改二进制资产。
 
 ## 三维模型约定
 
