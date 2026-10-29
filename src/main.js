@@ -265,10 +265,11 @@ async function startScene(){
   const camera=new THREE.PerspectiveCamera(30,innerWidth/innerHeight,.1,150);
   const controls=new OrbitControls(camera,canvas);controls.enableDamping=true;controls.dampingFactor=.07;controls.enablePan=false;controls.enableZoom=false;controls.minPolarAngle=.12;controls.maxPolarAngle=Math.PI/2-.03;controls.target.set(0,.7,0);
   const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  let layer='all', view='perspective', scrollProgress=0, progress=0, exploring=false, wasExploring=false, manualCamera=false, horizontalShift=innerWidth<=700?0:.13;
+  let layer='all', view='perspective', scrollProgress=0, progress=0, exploring=false, wasExploring=false, manualCamera=false, horizontalShift=innerWidth<=700?0:.13, introActive=!reduced;
   const targetCamera=new THREE.Vector3();
   function defaultCamera(){const mobile=innerWidth<=700;return new THREE.Vector3(...(mobile?[-14.5,4.7,15]:[-7.4,2.5,9.8]));}
   camera.position.copy(defaultCamera());controls.update();
+  if(introActive){vehicle.root.position.z=-30;vehicle.root.rotation.y=.2;}
   controls.addEventListener('start',()=>{manualCamera=true;});
   let previousManual=false;
   const inspector=createInspection({canvas,camera,controls,vehicle,resize,getState:()=>state,
@@ -351,6 +352,18 @@ async function startScene(){
       }
     } else {
       stepLocalMirror(state, dt);
+    }
+    // Intro: car arrives from the fog, decelerates to a cinematic stop
+    if(introActive){
+      vehicle.root.position.z=THREE.MathUtils.damp(vehicle.root.position.z,0,2.2,dt);
+      vehicle.root.rotation.y=THREE.MathUtils.damp(vehicle.root.rotation.y,0,4,dt);
+      if(Math.abs(vehicle.root.position.z)<.02){vehicle.root.position.z=0;vehicle.root.rotation.y=0;introActive=false;}
+      camera.position.copy(defaultCamera());controls.target.set(0,.7,0);
+      horizontalShift=THREE.MathUtils.damp(horizontalShift,innerWidth<=700?0:.13,4,dt);
+      camera.setViewOffset(innerWidth,innerHeight,innerWidth*horizontalShift,innerWidth<=700?innerHeight*.13:0,innerWidth,innerHeight);
+      controls.update();studio.update(0);vehicle.update(state,0,'all');renderer.render(scene,camera);
+      if(clock.elapsedTime-lastUi>.1){syncControls();lastUi=clock.elapsedTime;}
+      requestAnimationFrame(frame);return;
     }
     progress=reduced?scrollProgress:THREE.MathUtils.damp(progress,scrollProgress,5,dt);
     const focused=inspector.active||driving.active;
