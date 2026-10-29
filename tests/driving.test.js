@@ -47,6 +47,7 @@ test('speed clamps to max, negative or NaN dt does not advance, negative target 
 
 test('interlock: doors and charging cable prevent starting',()=>{
   const state=createMirror();
+  state.powerState='ready';
   assert.equal(applyLocalCommand(state,{type:'toggle_driving',on:true}).ok,true);
   state.doors.fl.open=true;
   assert.equal(applyLocalCommand(state,{type:'toggle_driving',on:true}).ok,false);
@@ -59,6 +60,7 @@ test('interlock: doors and charging cable prevent starting',()=>{
 });
 test('interlock: an open or still closing bonnet prevents starting',()=>{
   const state=createMirror();
+  state.powerState='ready';
   state.hood.open=true;
   assert.equal(applyLocalCommand(state,{type:'toggle_driving',on:true}).ok,false);
   state.hood.open=false;state.hood.angle=.4;
@@ -68,6 +70,7 @@ test('interlock: an open or still closing bonnet prevents starting',()=>{
 });
 test('interlock: tailgate must be fully closed before driving, while an open sunroof is allowed',()=>{
   const state=createMirror();
+  state.powerState='ready';
   state.tailgate.target=1;
   assert.equal(applyLocalCommand(state,{type:'toggle_driving',on:true}).ok,false);
   state.tailgate.target=0;state.tailgate.position=.3;

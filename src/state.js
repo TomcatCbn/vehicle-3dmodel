@@ -25,6 +25,8 @@ export function createMirror(positions = DEFAULT_POSITIONS) {
     charging: false,
     battery: 68,
     lighting: createLightingState(),
+    powerState: 'standby',
+    driving: false,
   };
 }
 
@@ -84,6 +86,9 @@ export function followSnapshot(mirror, snapshot, dt) {
   mirror.plugged = snapshot.plugged;
   mirror.charging = snapshot.charging;
   if (snapshot.lighting) mirror.lighting = { ...snapshot.lighting };
+  // Power state and driving flag (decision 8)
+  if (snapshot.powerState !== undefined) mirror.powerState = snapshot.powerState;
+  if (snapshot.driving !== undefined) mirror.driving = snapshot.driving;
 }
 
 // Exponential damp (matches THREE.MathUtils.damp without importing three).
@@ -93,9 +98,21 @@ function THREE_damp(current, target, lambda, dt) {
 
 // Browser fallback: apply a command locally (mirrors Rust apply_command).
 // Returns { ok: true } or { ok: false, error: 'message' }.
+// Power state gating per decision 8 D8.12.
 export function applyLocalCommand(state, command) {
   const anyDoorOpen = () => Object.values(state.doors).some(d => d.open);
   const anyDoorAjar = () => Object.values(state.doors).some(d => d.open || d.angle > 0.01);
+  const isHighVoltage = (cmd) => ['toggle_ac', 'toggle_charging'].includes(cmd.type) ||
+    (cmd.type === 'toggle_driving' && cmd.on === true);
+
+  // Power state gating
+  const ps = state.powerState || 'standby';
+  if (ps === 'sleep' && command.type !== 'set_power' && command.type !== 'reset') {
+    return { ok: false, error: '车辆处于休眠状态，请先上电' };
+  }
+  if (ps === 'standby' && isHighVoltage(command)) {
+    return { ok: false, error: '高压未闭合，请先上电至 Ready' };
+  }
 
   switch (command.type) {
     case 'toggle_lock':
@@ -166,6 +183,13 @@ export function applyLocalCommand(state, command) {
         if (state.tailgate.target > 0.001 || state.tailgate.position > 0.001) return { ok: false, error: '请先关好尾门' };
         if (state.plugged) return { ok: false, error: '请拔出充电枪' };
       }
+      state.driving = command.on;
+      return { ok: true };
+    case 'set_power':
+      if (command.state === 'sleep' && state.driving) {
+        return { ok: false, error: '请先停止行驶' };
+      }
+      state.powerState = command.state;
       return { ok: true };
     case 'reset':
       Object.assign(state, createMirror());

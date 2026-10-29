@@ -6,10 +6,11 @@ import { createVehicle } from './render/vehicle.js';
 import { createInspection } from './render/inspection.js';
 import { createDriving } from './render/driving.js';
 import { createMirror, stepLocalMirror, followSnapshot, applyLocalCommand, clamp } from './state.js';
+import { setupFileTransfer } from './file-transfer.js';
 import './style.css';
 
 const $ = selector => document.querySelector(selector);
-const icons={lock:'<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/>',door:'<path d="M5 21V8l5-5h9v18H5Z"/><path d="M8 10V8l3-3h5v5H8Zm6 5h2"/>',window:'<path d="M4 18V8l4-4h12v14H4Zm0-6h16M8 4v8m-6 9h20"/>',wind:'<path d="M3 8h12a3 3 0 1 0-3-3M2 12h17a3 3 0 1 1-3 3M4 16h6a3 3 0 1 1-3 3"/>',battery:'<rect x="3" y="6" width="17" height="12" rx="2"/><path d="M22 10v4M7 10v4m4-4v4m4-4v4"/>',light:'<path d="M4 7h8v10H4zM15 8l5-3m-5 7h6m-6 4 5 3"/>',tail:'<path d="M5 5h10l4 4v6l-4 4H5zM9 9h6l2 3-2 3H9z"/>',ambient:'<path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1m-8.6 8.6-2.1 2.1"/><circle cx="12" cy="12" r="3"/>'};
+const icons={lock:'<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/>',door:'<path d="M5 21V8l5-5h9v18H5Z"/><path d="M8 10V8l3-3h5v5H8Zm6 5h2"/>',window:'<path d="M4 18V8l4-4h12v14H4Zm0-6h16M8 4v8m-6 9h20"/>',wind:'<path d="M3 8h12a3 3 0 1 0-3-3M2 12h17a3 3 0 1 1-3 3M4 16h6a3 3 0 1 1-3 3"/>',battery:'<rect x="3" y="6" width="17" height="12" rx="2"/><path d="M22 10v4M7 10v4m4-4v4m4-4v4"/>',light:'<path d="M4 7h8v10H4zM15 8l5-3m-5 7h6m-6 4 5 3"/>',tail:'<path d="M5 5h10l4 4v6l-4 4H5zM9 9h6l2 3-2 3H9z"/>',ambient:'<path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1m-8.6 8.6-2.1 2.1"/><circle cx="12" cy="12" r="3"/>',link:'<path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>'};
 for(const node of document.querySelectorAll('[data-icon]'))node.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[node.dataset.icon]}</svg>`;
 const headlightLabels={off:'关闭',low:'近光',high:'远光'};
 
@@ -40,6 +41,20 @@ function tauriAvailable() {
   return typeof window !== 'undefined' &&
          Boolean(window.__TAURI__) &&
          Boolean(window.__TAURI__?.core?.invoke);
+}
+
+// ── Page routing (decision 8 D8.7) — three pages share canvas ──
+function switchPage(page) {
+  document.body.dataset.page = page;
+  for (const link of document.querySelectorAll('nav .nav-link')) {
+    link.classList.toggle('active', link.dataset.page === page);
+  }
+  if (page === 'garage') { window.scrollTo(0, 0); }
+  // Re-trigger scroll handler to update canvas visibility
+  dispatchEvent(new Event('scroll'));
+}
+for (const link of document.querySelectorAll('nav .nav-link')) {
+  link.addEventListener('click', (e) => { e.preventDefault(); switchPage(link.dataset.page); });
 }
 
 async function sendCommand(command) {
@@ -110,6 +125,19 @@ function syncControls(){
     const valEl = document.querySelector(`[data-window-value-id="${id}"]`);
     if (valEl) valEl.textContent = pct + '%';
   }
+  // Power state UI (decision 8 D8.11/D8.12)
+  const ps = state.powerState || 'standby';
+  const psLabels = { sleep: 'Sleep', standby: 'Standby', ready: 'Ready' };
+  $('#power-state-label').textContent = psLabels[ps] || ps;
+  $('#power-state-label').dataset.state = ps;
+  $('#power-on-btn').disabled = ps === 'ready';
+  $('#power-off-btn').disabled = ps === 'sleep' || state.driving;
+  document.body.dataset.power = ps;
+  // Control panel visual state
+  const panel = $('.control-panel');
+  panel.classList.toggle('power-sleep', ps === 'sleep');
+  panel.classList.toggle('power-standby', ps === 'standby');
+  panel.classList.toggle('power-ready', ps === 'ready');
 }
 
 // ── Event handlers → sendCommand ──
@@ -158,6 +186,26 @@ $('#headlight-toggle').addEventListener('click', async () => {
 $('#tail-toggle').addEventListener('click', async () => { await sendCommand({ type: 'toggle_tail_light' }); });
 for(const button of document.querySelectorAll('[data-ambient]'))button.addEventListener('click', async () => {
   await sendCommand({ type: 'set_ambient', color: button.dataset.ambient });
+});
+
+// ── Power state controls (decision 8 D8.2/D8.11) ──
+$('#power-on-btn').addEventListener('click', async () => {
+  const ok = await sendCommand({ type: 'set_power', state: 'ready' });
+  if (ok) toast('已上电至 Ready · 高压功能解锁');
+});
+$('#power-off-btn').addEventListener('click', async () => {
+  const ok = await sendCommand({ type: 'set_power', state: 'sleep' });
+  if (ok) toast('已熄火 · 进入休眠状态');
+});
+// BLE broadcast toggle (decision 8 D8.4 — independent of power state)
+$('#ble-toggle').addEventListener('click', () => {
+  const btn = $('#ble-toggle');
+  const on = btn.getAttribute('aria-checked') === 'true';
+  btn.setAttribute('aria-checked', String(!on));
+  $('#ble-status').textContent = !on ? '广播中' : '关闭';
+  $('#ble-indicator').classList.toggle('active', !on);
+  $('#ble-indicator').title = !on ? 'BLE 广播中' : 'BLE 关闭';
+  toast(!on ? 'BLE 广播已开启' : 'BLE 广播已关闭');
 });
 
 // ── Collapsible group headers ──
@@ -241,6 +289,9 @@ async function startScene(){
     await sendCommand({type:'toggle_hood'});
     if(inspector.active)inspector.refresh();
   });}
+
+  // M3.1: file transfer UI (Tauri-only, enabled inside setupFileTransfer).
+  setupFileTransfer();
   function resize(){
     const rect=inspector.active?inspector.stage.getBoundingClientRect():driving.active?driving.stage.getBoundingClientRect():{width:innerWidth,height:innerHeight};
     renderer.setSize(rect.width,rect.height);camera.aspect=rect.width/rect.height;camera.updateProjectionMatrix();
@@ -248,8 +299,12 @@ async function startScene(){
     if(driving.active)driving.refit();
   }
   addEventListener('resize',resize);resize();
-  function readScroll(){const rect=$('#explore').getBoundingClientRect();const mobile=innerWidth<=700;exploring=rect.top<innerHeight*.75;scrollProgress=clamp((-rect.top+innerHeight*.2)/(rect.height-innerHeight*.9));
-    $('#explore-hud').hidden=!exploring;$('#nav-control').classList.toggle('active',!exploring);$('#nav-explore').classList.toggle('active',exploring);
+  function readScroll(){
+    const page=document.body.dataset.page;
+    if(page==='car'||page==='garage'){exploring=false;scrollProgress=0;$('#explore-hud').hidden=true;canvas.style.opacity=page==='garage'?'0':'1';return;}
+    const rect=$('#explore').getBoundingClientRect();const mobile=innerWidth<=700;
+    exploring=rect.top<innerHeight*.75;scrollProgress=clamp((-rect.top+innerHeight*.2)/(rect.height-innerHeight*.9));
+    $('#explore-hud').hidden=!exploring;
     if(mobile&&!exploring){const upper=Math.max(0,scrollY-90);canvas.style.opacity=String(clamp(1-upper/440));}else canvas.style.opacity='1';
   }
   addEventListener('scroll',readScroll,{passive:true});readScroll();

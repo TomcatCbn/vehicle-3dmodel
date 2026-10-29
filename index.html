@@ -9,20 +9,25 @@
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <title>AURA T6 — AXIS 车辆实验室</title>
 </head>
-<body>
+<body data-page="car">
   <div id="app">
     <header class="header">
       <a href="#" class="brand" aria-label="AXIS 首页"><svg viewBox="0 0 28 28" fill="none"><path d="M3 23 14 4l11 19H3Z" stroke="currentColor" stroke-width="2"/><path d="m9 18 5-9 5 9H9Z" fill="currentColor"/></svg><span>AXIS<span class="brand-sub">VEHICLE LAB</span></span></a>
-      <nav aria-label="主导航"><a href="#" class="nav-link active" id="nav-control">车辆实验室</a><a href="#explore" class="nav-link" id="nav-explore">结构探索 <span>↗</span></a></nav>
-      <div class="local-badge"><span class="status-dot"></span>本地仿真 <span class="version">v0.1</span></div>
+      <nav aria-label="主导航"><a href="#" class="nav-link" data-page="welcome">欢迎</a><a href="#" class="nav-link active" data-page="car">爱车</a><a href="#" class="nav-link" data-page="garage">车库</a></nav>
+      <div class="header-right"><div class="power-control" id="power-control"><span class="power-state" id="power-state-label">Standby</span><button id="power-on-btn" class="power-btn">上电</button><button id="power-off-btn" class="power-btn">熄火</button></div><div class="conn-indicators"><span class="conn-dot mqtt" id="mqtt-indicator" title="MQTT 未连接"></span><span class="conn-dot ble" id="ble-indicator" title="BLE 关闭"></span></div><div class="local-badge"><span class="status-dot"></span>本地仿真 <span class="version">v0.1</span></div></div>
     </header>
     <main>
       <div id="scene-stage"><canvas id="vehicle-canvas" tabindex="0" aria-label="可旋转的三维电动车模型"></canvas><div class="scene-vignette"></div><div id="webgl-error" hidden>3D 场景暂时无法启动，请使用支持 WebGL 2 的浏览器并开启硬件加速。</div></div>
       <section class="lab-section" id="lab">
         <div class="model-heading"><div class="eyebrow"><span></span> VOLKSWAGEN / ID. AURA T6</div><h1>让每一次控制，<br>真实可见<span class="accent">。</span></h1><p>一台虚拟车辆，一个完整的交互世界。</p></div>
         <div class="model-meta"><span class="model-name">ID. AURA <b>T6</b></span><span class="model-type">纯电 SUV · 官网外观参考重建</span><div class="color-options" aria-label="车身颜色"><button data-color="#578d81" class="color-swatch selected" style="--swatch:#578d81" aria-label="青瓷绿" aria-pressed="true"></button><button data-color="#b7c3cb" class="color-swatch" style="--swatch:#b7c3cb" aria-label="冰川银" aria-pressed="false"></button><button data-color="#b9afa0" class="color-swatch" style="--swatch:#b9afa0" aria-label="砂岩米" aria-pressed="false"></button><button data-color="#373d48" class="color-swatch" style="--swatch:#373d48" aria-label="曜石黑" aria-pressed="false"></button><span id="color-name">青瓷绿</span></div></div>
-        <div class="scene-tools"><div class="view-selector" aria-label="观察视角"><button data-view="perspective" class="selected" aria-pressed="true">自由视角</button><button data-view="side" aria-pressed="false">侧视</button><button data-view="top" aria-pressed="false">俯视</button></div><button class="icon-button" id="reset-camera" aria-label="重置视角" title="重置视角">↺</button><button class="detail-open" data-inspect-open disabled>放大看细节 <span>↗</span></button><button class="drive-open" data-drive-open disabled>行驶演示 <span aria-hidden="true">→</span></button><span class="drag-hint">拖动旋转 · 双击部件看细节</span></div>
+        <div class="scene-tools"><div class="view-selector" aria-label="观察视角"><button data-view="perspective" class="selected" aria-pressed="true">自由视角</button><button data-view="side" aria-pressed="false">侧视</button><button data-view="top" aria-pressed="false">俯视</button></div><button class="icon-button" id="reset-camera" aria-label="重置视角" title="重置视角">↺</button><button class="detail-open" data-inspect-open disabled>放大看细节 <span>↗</span></button><button class="drive-open" data-drive-open disabled data-hv>行驶演示 <span aria-hidden="true">→</span></button><button class="ft-open" id="ft-open" disabled>文件传输 <span aria-hidden="true">↗</span></button><span class="drag-hint">拖动旋转 · 双击部件看细节</span></div>
         <aside class="control-panel" aria-label="车辆控制台"><div class="panel-heading"><div><span class="eyebrow">LIVE CONTROLS</span><h2>车辆控制台</h2></div><span class="live-indicator"><span class="status-dot"></span>运行中</span></div>
+          <div class="panel-group" data-group="connection"><button class="group-header" aria-expanded="true"><span class="group-icon" data-icon="link"></span><span class="group-title">连接状态</span><span class="group-chevron"></span></button><div class="group-body">
+            <div class="control-row"><span class="control-icon" data-icon="link"></span><div class="control-label">MQTT<span id="mqtt-status">未连接</span></div></div>
+            <div class="control-row"><span class="control-icon" data-icon="link"></span><div class="control-label">BLE 广播<span id="ble-status">关闭</span></div><button class="switch" id="ble-toggle" role="switch" aria-checked="false" aria-label="BLE广播"></button></div>
+            <div class="control-row"><span class="control-icon" data-icon="link"></span><div class="control-label">文件传输<span id="ft-conn-status">未启动</span></div></div>
+          </div></div>
           <div class="panel-group" data-group="doors"><button class="group-header" aria-expanded="true"><span class="group-icon" data-icon="lock"></span><span class="group-title">车门与锁</span><span class="group-chevron"></span></button><div class="group-body">
             <div class="control-row"><span class="control-icon" data-icon="lock"></span><div class="control-label">车锁<span id="lock-status">已锁定</span></div><button class="switch" id="lock-toggle" role="switch" aria-checked="true" aria-label="车锁"></button></div>
             <div class="control-row"><span class="control-icon" data-icon="door"></span><div class="control-label">全部门<span id="door-status">已关闭</span></div><button class="small-button" id="door-toggle">打开</button></div>
@@ -43,8 +48,8 @@
             <div class="control-row ambient-control"><span class="control-icon" data-icon="ambient"></span><div class="control-label">氛围灯</div><div class="ambient-presets" role="group" aria-label="氛围灯颜色"><button data-ambient="off" aria-pressed="true">关闭</button><button data-ambient="warm" aria-pressed="false">暖白</button><button data-ambient="ice" aria-pressed="false">冰蓝</button><button data-ambient="purple" aria-pressed="false">紫色</button></div></div>
           </div></div>
           <div class="panel-group" data-group="climate"><button class="group-header" aria-expanded="false"><span class="group-icon" data-icon="wind"></span><span class="group-title">空调与充电</span><span class="group-chevron"></span></button><div class="group-body" hidden>
-            <div class="ac-control"><div class="control-row"><span class="control-icon" data-icon="wind"></span><div class="control-label">空调<span id="ac-status">已关闭</span></div><button class="switch" id="ac-toggle" role="switch" aria-checked="false" aria-label="空调"></button></div><div class="temperature-control"><button id="temp-down" aria-label="降低温度">−</button><span><b id="temperature">22</b><span>°C</span></span><button id="temp-up" aria-label="升高温度">＋</button></div></div>
-            <div class="charge-control"><div class="control-row"><span class="control-icon" data-icon="battery"></span><div class="control-label">电池与充电<span id="charge-status">充电枪未连接</span></div><span class="battery-value"><b id="battery-value">68</b><small>%</small></span></div><div class="battery-track"><div id="battery-fill"></div></div><div class="charge-actions"><button id="plug-toggle" class="small-button">连接充电枪</button><button id="charge-toggle" class="small-button" disabled>开始充电</button></div></div>
+            <div class="ac-control"><div class="control-row"><span class="control-icon" data-icon="wind"></span><div class="control-label">空调<span id="ac-status">已关闭</span></div><button class="switch" id="ac-toggle" role="switch" aria-checked="false" aria-label="空调" data-hv></button></div><div class="temperature-control"><button id="temp-down" aria-label="降低温度" data-hv>−</button><span><b id="temperature">22</b><span>°C</span></span><button id="temp-up" aria-label="升高温度" data-hv>＋</button></div></div>
+            <div class="charge-control"><div class="control-row"><span class="control-icon" data-icon="battery"></span><div class="control-label">电池与充电<span id="charge-status">充电枪未连接</span></div><span class="battery-value"><b id="battery-value">68</b><small>%</small></span></div><div class="battery-track"><div id="battery-fill"></div></div><div class="charge-actions"><button id="plug-toggle" class="small-button">连接充电枪</button><button id="charge-toggle" class="small-button" disabled data-hv>开始充电</button></div></div>
           </div></div>
           <div class="panel-footer"><span><i></i> 状态实时驱动模型</span><button id="reset-state">重置车辆 ↺</button></div>
         </aside>
@@ -57,8 +62,16 @@
         <div class="explore-chapter" data-chapter="2"><span class="chapter-number">03 / 04</span><h3>轮组与底盘</h3><p>轮胎、轮毂、制动盘向两侧分离，<br>揭开车辆行驶系统的构成。</p><span class="chapter-tag">CHASSIS & WHEELS</span></div>
         <div class="explore-chapter" data-chapter="3"><span class="chapter-number">04 / 04</span><h3>电池与动力</h3><p>电池模组与电驱示意结构独立呈现，<br>用于观察车控状态与部件关系。</p><span class="chapter-tag">BATTERY & POWERTRAIN</span></div>
       </section>
-      <div class="explore-hud" id="explore-hud" hidden><div class="explosion-progress"><span>ASSEMBLY EXPLORER</span><b id="explosion-value">0%</b><div><i id="explosion-fill"></i></div></div><div class="layer-buttons" aria-label="高亮部件层"><button data-layer="all" class="selected">全部部件</button><button data-layer="body">车身</button><button data-layer="cabin">座舱</button><button data-layer="chassis">底盘</button><button data-layer="power">电池</button></div><button class="detail-open" data-inspect-open disabled>放大看细节 ↗</button><button class="drive-open" data-drive-open disabled>行驶演示 →</button><a href="#" class="back-link">↑ 回到车辆控制</a></div>
+      <div class="explore-hud" id="explore-hud" hidden><div class="explosion-progress"><span>ASSEMBLY EXPLORER</span><b id="explosion-value">0%</b><div><i id="explosion-fill"></i></div></div><div class="layer-buttons" aria-label="高亮部件层"><button data-layer="all" class="selected">全部部件</button><button data-layer="body">车身</button><button data-layer="cabin">座舱</button><button data-layer="chassis">底盘</button><button data-layer="power">电池</button></div><button class="detail-open" data-inspect-open disabled>放大看细节 ↗</button><button class="drive-open" data-drive-open disabled data-hv>行驶演示 →</button><a href="#" class="back-link">↑ 回到车辆控制</a></div>
       <footer><span class="brand-text">AXIS / VEHICLE LAB</span><span>构建可见，测试可信。</span><span>外观参考重建 · 内部结构示意</span></footer>
+      <section class="garage-section" id="garage-page" hidden>
+        <div class="garage-empty">
+          <span class="eyebrow">GARAGE</span>
+          <h2>我的车库</h2>
+          <p>还没有车辆实例</p>
+          <button id="garage-add" class="garage-add-btn">+ 添加车辆</button>
+        </div>
+      </section>
     </main>
     <div id="toast" role="status" aria-live="polite"></div>
   </div>
@@ -76,6 +89,31 @@
       <div class="drive-speed-heading"><div class="drive-speed-title"><label for="drive-range">目标速度 <output id="drive-target" for="drive-range">40</output><span>km/h</span></label><div class="drive-direction" role="group" aria-label="行驶方向"><button data-direction="1" aria-pressed="true">前进</button><button data-direction="-1" aria-pressed="false">倒车</button></div></div><input id="drive-range" type="range" min="0" max="100" value="40" step="5" aria-label="目标速度"/><div class="range-labels"><span>0</span><span id="drive-speed-mid">50</span><span id="drive-speed-max">100 km/h</span></div></div>
       <p id="drive-help">倒车限速 20 km/h · 停稳后可切换方向 · 退出后停驶 · Esc 返回</p>
     </footer>
+  </dialog>
+  <dialog id="ft-dialog" aria-labelledby="ft-title">
+    <header class="ft-header"><div><span class="eyebrow">CEA2.x / FILE TRANSFER</span><h2 id="ft-title">车机文件传输<span class="accent">。</span></h2><p>扫描二维码连接车机，下载分享文件</p></div><button id="ft-close" class="detail-back">返回 <span aria-hidden="true">×</span></button></header>
+    <div class="ft-body">
+      <div id="ft-empty" class="ft-empty">
+        <div class="ft-file-manager">
+          <div class="ft-fm-header">
+            <span class="ft-fm-title">分享文件 <span id="ft-file-count">0</span>/9</span>
+            <div class="ft-fm-actions">
+              <button id="ft-add-file" class="ft-fm-btn">+ 添加文件</button>
+              <button id="ft-reset-files" class="ft-fm-btn">重置</button>
+            </div>
+          </div>
+          <ul id="ft-pick-list" class="ft-file-list"></ul>
+        </div>
+        <button id="ft-start" class="ft-start-btn">开始分享</button>
+        <p class="ft-hint">确保手机与电脑在同一局域网内</p>
+      </div>
+      <div id="ft-info" class="ft-info" hidden>
+        <div class="ft-qr-wrap"><canvas id="ft-qr-canvas" width="256" height="256"></canvas><div id="ft-countdown" class="ft-countdown"></div></div>
+        <div class="ft-details"><div class="ft-detail-row"><span>服务器</span><code id="ft-server">—</code></div><div class="ft-detail-row"><span>证书指纹</span><code id="ft-fingerprint">—</code></div><div class="ft-detail-row"><span>分享文件</span><ul id="ft-files" class="ft-file-list"></ul></div></div>
+        <button id="ft-stop" class="ft-stop-btn" hidden>停止分享</button>
+      </div>
+      <div id="ft-error" class="ft-error" hidden></div>
+    </div>
   </dialog>
   <script type="module" src="/src/main.js"></script>
 </body>

@@ -116,3 +116,115 @@ body.driving-open{overflow:hidden}
   .drive-speed-title output{font-size:18px}
   .lab-section{height:1880px}
 }
+/* ── M3.1 File Transfer Dialog ── */
+#ft-dialog{width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;padding:0;border:0;inset:0;background:#11191d;color:#eef0f1;overflow:auto}
+#ft-dialog::backdrop{background:#0c1013}
+.ft-header{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:20px 32px;border-bottom:1px solid var(--line);background:#11191d}
+.ft-header .eyebrow{font-size:8px;letter-spacing:2px;color:#91a59c}
+.ft-header h2{font-size:26px;font-weight:450;letter-spacing:.5px;margin:7px 0}
+.ft-header p{font-size:10px;color:#a8b4b7;margin:0}
+.ft-body{max-width:680px;margin:0 auto;padding:40px 32px;display:flex;flex-direction:column;align-items:center;gap:24px}
+.ft-empty{text-align:center;display:flex;flex-direction:column;align-items:center;gap:16px;padding:40px 0}
+.ft-empty p{font-size:13px;color:#a8b4b7;margin:0}
+.ft-hint{font-size:11px;color:#7c9492!important}
+.ft-start-btn{min-height:44px;padding:10px 28px;border:1px solid var(--mint);border-radius:8px;background:var(--mint);color:#183625;font-size:14px}
+.ft-start-btn:hover{background:#c8f4d4}
+.ft-start-btn:disabled{opacity:.4}
+.ft-info{display:flex;flex-direction:column;align-items:center;gap:24px;width:100%}
+.ft-qr-wrap{position:relative;display:flex;flex-direction:column;align-items:center;gap:12px}
+.ft-qr-wrap canvas{border-radius:12px;background:#fff;padding:8px}
+.ft-countdown{font-size:12px;color:var(--mint);font-variant-numeric:tabular-nums}
+.ft-countdown.expired{color:#e88}
+.ft-details{width:100%;display:flex;flex-direction:column;gap:12px;padding:20px;background:#ffffff04;border:1px solid var(--line);border-radius:10px}
+.ft-detail-row{display:flex;flex-direction:column;gap:4px;font-size:11px;color:#8da3a2}
+.ft-detail-row>span{font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:#7c9492}
+.ft-detail-row code{font-size:12px;color:#dfeade;font-family:'Space Grotesk',monospace;word-break:break-all}
+.ft-file-list{list-style:none;margin:4px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.ft-file-list li{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#cbd8d2;padding:6px 8px;background:#ffffff06;border-radius:5px;gap:4px}
+.ft-file-name{font-weight:500}
+.ft-file-meta{font-size:10px;color:#8da3a2}
+.ft-file-manager{width:100%;max-width:420px;display:flex;flex-direction:column;gap:8px}
+.ft-fm-header{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#8da3a2}
+.ft-fm-actions{display:flex;gap:6px}
+.ft-fm-btn{padding:4px 10px;font-size:11px;border:1px solid var(--line);border-radius:5px;background:#ffffff06;color:#a8b9bb;cursor:pointer}
+.ft-fm-btn:hover{border-color:var(--mint);color:var(--mint)}
+.ft-fm-btn:disabled{opacity:.4}
+.ft-file-info{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.ft-file-info .ft-file-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ft-file-remove{flex-shrink:0;background:none;border:none;color:#7c9492;font-size:16px;cursor:pointer;padding:0 4px;line-height:1}
+.ft-file-remove:hover{color:#e88}
+.ft-file-empty-hint{justify-content:center!important;color:#7c9492!important;font-size:11px!important;font-style:italic}
+.ft-stop-btn{min-height:40px;padding:8px 24px;border:1px solid #e886;border-radius:8px;background:transparent;color:#e88;font-size:13px}
+.ft-stop-btn:hover{background:#e8861a}
+.ft-error{font-size:12px;color:#e88;text-align:center;padding:12px;background:#e8811a;border-radius:8px}
+.ft-open{min-height:38px;padding:8px 13px;font-size:11px;border:1px solid var(--line);border-radius:6px;background:#ffffff06;color:#a8b9bb}
+.ft-open:hover{border-color:var(--mint);color:var(--mint)}
+.ft-open:disabled{opacity:.32}
+@media(max-width:700px){
+  .ft-header{padding:16px 18px}
+  .ft-header h2{font-size:22px}
+  .ft-body{padding:24px 18px}
+  .ft-qr-wrap canvas{width:200px!important;height:200px!important}
+  .ft-details{padding:16px}
+}
+
+/* ── Decision 8: Three-page architecture + power state UI ── */
+
+/* Header right section: power control + conn indicators + badge */
+.header-right{display:flex;align-items:center;gap:16px}
+.power-control{display:flex;align-items:center;gap:8px}
+.power-state{font-size:11px;font-weight:600;padding:4px 10px;border-radius:4px;border:1px solid var(--line);font-family:'Space Grotesk',sans-serif;letter-spacing:.5px}
+.power-state[data-state="sleep"]{color:#7c9492;border-color:#ffffff15}
+.power-state[data-state="standby"]{color:#f0d7ad;border-color:#d3c09d44}
+.power-state[data-state="ready"]{color:var(--mint);border-color:#b8ebc655}
+.power-btn{font-size:11px;padding:5px 12px;border:1px solid var(--line);border-radius:5px;background:#ffffff06;color:#a8b9bb;white-space:nowrap}
+.power-btn:hover:not(:disabled){border-color:var(--mint);color:var(--mint)}
+.power-btn:disabled{opacity:.32;cursor:not-allowed}
+.conn-indicators{display:flex;gap:6px}
+.conn-dot{width:8px;height:8px;border-radius:50%;background:#ffffff15;border:1px solid #ffffff25;position:relative}
+.conn-dot.mqtt{background:#7c9492}
+.conn-dot.ble{background:#7c9492}
+.conn-dot.active{background:var(--mint);box-shadow:0 0 6px #b8ebc666;border-color:var(--mint)}
+
+/* Power controls only visible on car page */
+body:not([data-page="car"]) .power-control,
+body:not([data-page="car"]) .conn-indicators{display:none}
+
+/* Page switching (D8.7) */
+body[data-page="car"] #explore,
+body[data-page="car"] .explore-hud{display:none!important}
+body[data-page="welcome"] .control-panel{display:none!important}
+body[data-page="garage"] #scene-stage,
+body[data-page="garage"] .lab-section,
+body[data-page="garage"] #explore,
+body[data-page="garage"] .explore-hud,
+body[data-page="garage"] footer{display:none!important}
+body:not([data-page="garage"]) #garage-page{display:none!important}
+
+/* Control panel power state grayout (D8.12) */
+.control-panel.power-sleep .panel-group:not([data-group="connection"]){opacity:.3;pointer-events:none}
+.control-panel.power-standby [data-hv]{opacity:.3;pointer-events:none}
+/* Drive-open buttons HV-gated on car page only */
+body[data-page="car"][data-power="sleep"] .drive-open,
+body[data-page="car"][data-power="standby"] .drive-open{opacity:.3;pointer-events:none}
+body[data-page="car"][data-power="sleep"] .detail-open,
+body[data-page="car"][data-power="sleep"] .ft-open{opacity:.3;pointer-events:none}
+
+/* Garage page */
+.garage-section{min-height:100vh;padding:60px 8%;display:flex;align-items:center;justify-content:center}
+.garage-empty{text-align:center;display:flex;flex-direction:column;align-items:center;gap:16px}
+.garage-empty .eyebrow{font-size:10px;letter-spacing:2px;color:#7c9492}
+.garage-empty h2{font-size:32px;font-weight:450;letter-spacing:1px;margin:0;color:#eef0f1}
+.garage-empty p{font-size:14px;color:#8da3a2;margin:0}
+.garage-add-btn{min-height:48px;padding:12px 32px;border:1px solid var(--mint);border-radius:8px;background:var(--mint);color:#183625;font-size:14px;margin-top:8px}
+.garage-add-btn:hover{background:#c8f4d4}
+
+@media(max-width:700px){
+  .header-right{gap:10px}
+  .power-control{gap:5px}
+  .power-state{font-size:10px;padding:3px 7px}
+  .power-btn{font-size:10px;padding:4px 8px}
+  .conn-indicators{display:none}
+  .garage-section{padding:40px 20px}
+  .garage-empty h2{font-size:26px}
+}
