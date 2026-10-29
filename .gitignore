@@ -1,8 +1,11 @@
 node_modules/
 dist/
 output/
+logs/
+src-tauri/target/
 .playwright-cli/
 *.blend1
 *.blend2
 __pycache__/
 *.py[cod]
+.gstack/

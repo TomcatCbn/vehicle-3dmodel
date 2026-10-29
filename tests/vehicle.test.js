@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { createVehicle } from '../src/vehicle.js';
+import { createVehicle } from '../src/render/vehicle.js';
 import { createState } from '../src/state.js';
 
 function sceneFixture() {

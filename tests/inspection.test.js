@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { createVehicle } from '../src/vehicle.js';
+import { createVehicle } from '../src/render/vehicle.js';
 import { createState } from '../src/state.js';
-import { getInspectionMeshes, getInspectionBounds, fitInspectionView, isolateMeshes, INSPECTION_VIEWS } from '../src/inspection.js';
+import { getInspectionMeshes, getInspectionBounds, fitInspectionView, isolateMeshes, INSPECTION_VIEWS } from '../src/render/inspection.js';
 
 async function model(){
   const b=await readFile(new URL('../public/models/aura-t6.glb',import.meta.url));

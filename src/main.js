@@ -1,37 +1,84 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createStudio } from './studio.js';
+import { createStudio } from './render/studio.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { createVehicle } from './vehicle.js';
-import { createInspection } from './inspection.js';
-import { createDriving } from './driving.js';
-import { createState, stepVehicle, setCharging, clamp } from './state.js';
+import { createVehicle } from './render/vehicle.js';
+import { createInspection } from './render/inspection.js';
+import { createDriving } from './render/driving.js';
+import { createMirror, stepLocalMirror, followSnapshot, applyLocalCommand, clamp } from './state.js';
 import './style.css';
 
 const $ = selector => document.querySelector(selector);
 const icons={lock:'<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/>',door:'<path d="M5 21V8l5-5h9v18H5Z"/><path d="M8 10V8l3-3h5v5H8Zm6 5h2"/>',window:'<path d="M4 18V8l4-4h12v14H4Zm0-6h16M8 4v8m-6 9h20"/>',wind:'<path d="M3 8h12a3 3 0 1 0-3-3M2 12h17a3 3 0 1 1-3 3M4 16h6a3 3 0 1 1-3 3"/>',battery:'<rect x="3" y="6" width="17" height="12" rx="2"/><path d="M22 10v4M7 10v4m4-4v4m4-4v4"/>',light:'<path d="M4 7h8v10H4zM15 8l5-3m-5 7h6m-6 4 5 3"/>',tail:'<path d="M5 5h10l4 4v6l-4 4H5zM9 9h6l2 3-2 3H9z"/>',ambient:'<path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1m-8.6 8.6-2.1 2.1"/><circle cx="12" cy="12" r="3"/>'};
 for(const node of document.querySelectorAll('[data-icon]'))node.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[node.dataset.icon]}</svg>`;
 const headlightLabels={off:'关闭',low:'近光',high:'远光'};
-let state=createState();
+
+// Signal→GLB part mapping for AURA T6 (decision 7 mapping.parts).
+// GLB uses side codes: name suffix _1 = side -1 = 左, _-1 = side 1 = 右.
+// Verified against GLB extras: door_1_0=左前门, door_-1_0=右前门, etc.
+const AURA_T6_MAPPING = {
+  'door.fl':'door_1_0','door.fr':'door_-1_0','door.rl':'door_1_1','door.rr':'door_-1_1',
+  'window.fl':'window_1_0','window.fr':'window_-1_0','window.rl':'window_1_1','window.rr':'window_-1_1',
+  'hood':'hood','hood.strut.l':'bonnet_strut_1','hood.strut.r':'bonnet_strut_-1',
+  'sunroof':'sunroof',
+  'tailgate':'tailgate','tailgate.spoiler':'rear_spoiler','tailgate.glass':'rear_glass','tailgate.lamp':'tail_lights','tailgate.strut.l':'tailgate_strut_1','tailgate.strut.r':'tailgate_strut_-1',
+  'plug.cable':'charge_cable','ac.airflow':'airflow',
+};
+
+let state = createMirror();
 let toastTimer;
 function toast(message){$('#toast').textContent=message;$('#toast').classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').classList.remove('visible'),2400);}
+
+// Unified command sender: Tauri invoke with per-call error handling.
+// No permanent "tauriFailed" flag — each call retries Tauri independently.
+let latestSnapshot = null;
+let unlistenStateChanged = null;
+let eventReady = false;
+
+// Check Tauri availability at call time (not module load time).
+function tauriAvailable() {
+  return typeof window !== 'undefined' &&
+         Boolean(window.__TAURI__) &&
+         Boolean(window.__TAURI__?.core?.invoke);
+}
+
+async function sendCommand(command) {
+  if (tauriAvailable()) {
+    try {
+      const result = await window.__TAURI__.core.invoke('send_vehicle_command', { command });
+      latestSnapshot = result;
+      return true;
+    } catch (e) {
+      toast(String(e));
+      return false;
+    }
+  }
+  // Browser mode: apply command directly to mirror state.
+  const result = applyLocalCommand(state, command);
+  if (!result.ok) { toast(result.error); return false; }
+  return true;
+}
+
 function syncControls(){
-  const roofPercent=Math.round(state.sunroofPosition*100),roofTarget=Math.round(state.sunroofTarget*100);
+  const anyDoorOpen = Object.values(state.doors).some(d => d.open);
+  const maxWindowOpen = Math.max(0, ...Object.values(state.windows).map(w => w.open));
+  const roofPercent = Math.round(state.sunroof.position * 100);
+  const roofTarget = Math.round(state.sunroof.target * 100);
   for(const output of document.querySelectorAll('[data-sunroof-value]'))output.textContent=roofPercent+'%';
   for(const range of document.querySelectorAll('[data-sunroof-range]')){
     range.value=roofTarget;range.style.setProperty('--range-progress',roofTarget+'%');range.setAttribute('aria-valuetext','目标 '+roofTarget+'%，当前 '+roofPercent+'%');
   }
-  const gatePercent=Math.round(state.tailgatePosition*100),moving=Math.abs(state.tailgatePosition-state.tailgateTarget)>.0001;
-  const gateStatus=moving?(state.tailgateTarget>state.tailgatePosition?'开启中 ':'关闭中 ')+gatePercent+'%':gatePercent===0?'已关闭':gatePercent===100?'已打开':'已暂停 '+gatePercent+'%';
+  const gatePercent=Math.round(state.tailgate.position*100),moving=Math.abs(state.tailgate.position-state.tailgate.target)>.0001;
+  const gateStatus=moving?(state.tailgate.target>state.tailgate.position?'开启中 ':'关闭中 ')+gatePercent+'%':gatePercent===0?'已关闭':gatePercent===100?'已打开':'已暂停 '+gatePercent+'%';
   for(const output of document.querySelectorAll('[data-tailgate-status]'))output.textContent=gateStatus;
   for(const button of document.querySelectorAll('[data-tailgate-action]')){
-    button.disabled=button.dataset.tailgateAction==='stop'?!moving:button.dataset.tailgateAction==='open'?state.tailgatePosition>=.999&&state.tailgateTarget>=.999:state.tailgatePosition<=.001&&state.tailgateTarget<=.001;
+    button.disabled=button.dataset.tailgateAction==='stop'?!moving:button.dataset.tailgateAction==='open'?state.tailgate.position>=.999&&state.tailgate.target>=.999:state.tailgate.position<=.001&&state.tailgate.target<=.001;
   }
   $('#lock-toggle').setAttribute('aria-checked',String(state.locked));$('#lock-status').textContent=state.locked?'已锁定':'已解锁';
-  $('#door-status').textContent=state.doorsOpen?'已打开':'已关闭';$('#door-toggle').textContent=state.doorsOpen?'关闭':'打开';
-  $('#hood-status').textContent=state.hoodOpen?'已打开':'已关闭';
+  $('#door-status').textContent=anyDoorOpen?'已打开':'已关闭';$('#door-toggle').textContent=anyDoorOpen?'关闭':'打开';
+  $('#hood-status').textContent=state.hood.open?'已打开':'已关闭';
   for(const button of document.querySelectorAll('[data-hood-toggle]')){
-    button.textContent=state.hoodOpen?'关闭机盖':'打开机盖';button.setAttribute('aria-pressed',String(state.hoodOpen));
+    button.textContent=state.hood.open?'关闭机盖':'打开机盖';button.setAttribute('aria-pressed',String(state.hood.open));
   }
   $('#headlight-status').textContent=headlightLabels[state.lighting.headlights];
   $('#headlight-toggle').textContent=headlightLabels[state.lighting.headlights];
@@ -40,30 +87,117 @@ function syncControls(){
   $('#tail-status').textContent=state.lighting.tailLights?'已开启':'已关闭';
   for(const button of document.querySelectorAll('[data-ambient]'))button.setAttribute('aria-pressed',String(button.dataset.ambient===state.lighting.ambient));
   $('#ac-toggle').setAttribute('aria-checked',String(state.ac));$('#ac-status').textContent=state.ac?'运行中':'已关闭';$('#temperature').textContent=state.temperature;
-  $('#window-value').innerHTML=`${Math.round(state.windowOpen*100)}<span>%</span>`;
+  $('#window-value').innerHTML=`${Math.round(maxWindowOpen*100)}<span>%</span>`;
   $('#battery-value').textContent=Math.floor(state.battery);$('#battery-fill').style.width=`${state.battery}%`;
   $('#charge-status').textContent=state.charging?'正在充电 · 时间加速模拟':state.plugged?'充电枪已连接':'充电枪未连接';
   $('#plug-toggle').textContent=state.plugged?'拔出充电枪':'连接充电枪';$('#charge-toggle').disabled=!state.plugged||state.battery>=100;$('#charge-toggle').textContent=state.charging?'停止充电':'开始充电';
+  // Individual door cells
+  for(const cell of document.querySelectorAll('[data-door]')){
+    const id = cell.dataset.door;
+    const door = state.doors[id];
+    if (!door) continue;
+    cell.setAttribute('data-open', String(door.open));
+    const statusEl = cell.querySelector('[data-door-status-id]');
+    if (statusEl) statusEl.textContent = door.open ? '已打开' : '已关闭';
+  }
+  // Individual window sliders
+  for(const range of document.querySelectorAll('[data-window-range-id]')){
+    const id = range.dataset.windowRangeId;
+    const win = state.windows[id];
+    if (!win) continue;
+    const pct = Math.round(win.target * 100);
+    if (document.activeElement !== range) { range.value = pct; range.style.setProperty('--range-progress', pct + '%'); }
+    const valEl = document.querySelector(`[data-window-value-id="${id}"]`);
+    if (valEl) valEl.textContent = pct + '%';
+  }
 }
-$('#lock-toggle').addEventListener('click',()=>{if(!state.locked&&state.doorsOpen){toast('请先关闭车门，再锁定车辆');return;}state.locked=!state.locked;syncControls();toast(state.locked?'车辆已锁定':'车辆已解锁');});
-$('#door-toggle').addEventListener('click',()=>{if(state.locked){toast('请先解锁车辆');return;}state.doorsOpen=!state.doorsOpen;syncControls();});
-$('#window-range').addEventListener('input',event=>{state.windowTarget=Number(event.target.value)/100;event.target.style.setProperty('--range-progress',`${event.target.value}%`);});
-$('#ac-toggle').addEventListener('click',()=>{state.ac=!state.ac;syncControls();});
-for(const [selector,delta] of [['#temp-down',-1],['#temp-up',1]])$(selector).addEventListener('click',()=>{state.temperature=clamp(state.temperature+delta,16,30);syncControls();});
-$('#plug-toggle').addEventListener('click',()=>{state.plugged=!state.plugged;if(!state.plugged)state.charging=false;syncControls();toast(state.plugged?'充电枪已连接':'充电枪已拔出');});
-$('#charge-toggle').addEventListener('click',()=>{if(setCharging(state,!state.charging)){syncControls();toast(state.charging?'开始充电，电量按加速时间增长':'充电已停止');}});
-$('#reset-state').addEventListener('click',()=>{state=createState();$('#window-range').value=0;$('#window-range').style.setProperty('--range-progress','0%');syncControls();toast('车辆已恢复初始状态');});
-for(const range of document.querySelectorAll('[data-sunroof-range]'))range.addEventListener('input',event=>{state.sunroofTarget=clamp(Number(event.target.value)/100);syncControls();});
-for(const button of document.querySelectorAll('[data-tailgate-action]'))button.addEventListener('click',()=>{
-  state.tailgateTarget=button.dataset.tailgateAction==='open'?1:button.dataset.tailgateAction==='close'?0:state.tailgatePosition;syncControls();
+
+// ── Event handlers → sendCommand ──
+// Interlock checks are handled by Rust interlock module; frontend no longer
+// pre-checks to avoid state sync race conditions.
+$('#lock-toggle').addEventListener('click', async () => {
+  await sendCommand({ type: 'toggle_lock' });
 });
-$('#headlight-toggle').addEventListener('click',()=>{
-  const modes=['off','low','high'],index=modes.indexOf(state.lighting.headlights);
-  state.lighting.headlights=modes[(index+1)%modes.length];syncControls();
+$('#door-toggle').addEventListener('click', async () => {
+  await sendCommand({ type: 'toggle_door', id: null });
 });
-$('#tail-toggle').addEventListener('click',()=>{state.lighting.tailLights=!state.lighting.tailLights;syncControls();});
-for(const button of document.querySelectorAll('[data-ambient]'))button.addEventListener('click',()=>{state.lighting.ambient=button.dataset.ambient;syncControls();});
+$('#window-range').addEventListener('input', async event => {
+  const target = Number(event.target.value) / 100;
+  event.target.style.setProperty('--range-progress', `${event.target.value}%`);
+  await sendCommand({ type: 'set_window', id: null, target });
+});
+$('#ac-toggle').addEventListener('click', async () => { await sendCommand({ type: 'toggle_ac' }); });
+for(const [selector,delta] of [['#temp-down',-1],['#temp-up',1]])$(selector).addEventListener('click', async () => {
+  await sendCommand({ type: 'set_temperature', value: clamp(state.temperature + delta, 16, 30) });
+});
+$('#plug-toggle').addEventListener('click', async () => {
+  const wasPlugged = tauriAvailable() ? latestSnapshot?.plugged : state.plugged;
+  await sendCommand({ type: 'toggle_plug' });
+  toast(wasPlugged ? '充电枪已拔出' : '充电枪已连接');
+});
+$('#charge-toggle').addEventListener('click', async () => {
+  await sendCommand({ type: 'toggle_charging' });
+});
+$('#reset-state').addEventListener('click', async () => {
+  await sendCommand({ type: 'reset' });
+  $('#window-range').value = 0; $('#window-range').style.setProperty('--range-progress', '0%');
+  for(const range of document.querySelectorAll('[data-window-range-id]')){ range.value = 0; range.style.setProperty('--range-progress', '0%'); }
+  toast('车辆已恢复初始状态');
+});
+for(const range of document.querySelectorAll('[data-sunroof-range]'))range.addEventListener('input', async event => {
+  await sendCommand({ type: 'set_sunroof', target: clamp(Number(event.target.value) / 100) });
+});
+for(const button of document.querySelectorAll('[data-tailgate-action]'))button.addEventListener('click', async () => {
+  await sendCommand({ type: 'tailgate', action: button.dataset.tailgateAction });
+});
+$('#headlight-toggle').addEventListener('click', async () => {
+  const modes = ['off', 'low', 'high'];
+  const index = modes.indexOf(state.lighting.headlights);
+  await sendCommand({ type: 'set_headlight', mode: modes[(index + 1) % modes.length] });
+});
+$('#tail-toggle').addEventListener('click', async () => { await sendCommand({ type: 'toggle_tail_light' }); });
+for(const button of document.querySelectorAll('[data-ambient]'))button.addEventListener('click', async () => {
+  await sendCommand({ type: 'set_ambient', color: button.dataset.ambient });
+});
+
+// ── Collapsible group headers ──
+for(const header of document.querySelectorAll('.group-header')){
+  header.addEventListener('click', () => {
+    const expanded = header.getAttribute('aria-expanded') === 'true';
+    header.setAttribute('aria-expanded', String(!expanded));
+    header.nextElementSibling.hidden = expanded;
+  });
+}
+
+// ── Individual door toggles ──
+for(const cell of document.querySelectorAll('[data-door]')){
+  cell.addEventListener('click', async () => {
+    await sendCommand({ type: 'toggle_door', id: cell.dataset.door });
+  });
+}
+
+// ── Individual window sliders ──
+for(const range of document.querySelectorAll('[data-window-range-id]')){
+  range.style.setProperty('--range-progress', range.value + '%');
+  range.addEventListener('input', async event => {
+    const id = event.target.dataset.windowRangeId;
+    const target = Number(event.target.value) / 100;
+    event.target.style.setProperty('--range-progress', event.target.value + '%');
+    await sendCommand({ type: 'set_window', id, target });
+  });
+}
+
 syncControls();
+
+// In Tauri mode, listen for backend state-changed events.
+if (tauriAvailable()) {
+  try {
+    window.__TAURI__.event.listen('signal://state-changed', (event) => {
+      latestSnapshot = event.payload.state;
+    }).then(unlisten => { unlistenStateChanged = unlisten; eventReady = true; })
+      .catch(() => {});
+  } catch {}
+}
 
 startScene().catch(error => { $('#webgl-error').hidden=false; $('#webgl-error').textContent='模型暂时无法加载，请检查本地模型文件与浏览器 WebGL 支持后刷新。'; $('.telemetry>span:first-child').textContent='模型加载失败'; $('.live-indicator').textContent='场景不可用'; console.error(error); });
 
@@ -77,7 +211,7 @@ async function startScene(){
   const studio=await createStudio(renderer,scene);
   $('.telemetry>span:first-child').textContent='正在加载 AURA T6…';
   const gltf=await new GLTFLoader().loadAsync('/models/aura-t6.glb');
-  const vehicle=createVehicle(gltf.scene);scene.add(vehicle.root);$('#part-count').textContent=`${vehicle.parts.length} 个独立部件`;
+  const vehicle=createVehicle(gltf.scene, AURA_T6_MAPPING);scene.add(vehicle.root);$('#part-count').textContent=`${vehicle.parts.length} 个独立部件`;
   $('.telemetry>span:first-child').textContent='AURA T6 已就绪';
   const camera=new THREE.PerspectiveCamera(30,innerWidth/innerHeight,.1,150);
   const controls=new OrbitControls(camera,canvas);controls.enableDamping=true;controls.dampingFactor=.07;controls.enablePan=false;controls.enableZoom=false;controls.minPolarAngle=.12;controls.maxPolarAngle=Math.PI/2-.03;controls.target.set(0,.7,0);
@@ -93,20 +227,20 @@ async function startScene(){
     onExit(){manualCamera=previousManual;readScroll();},
     onIsolate(value,box){studio.setIsolated(value,box);},
     onSelect(id){
-      if(id==='hood'){state.hoodOpen=true;state.hoodAngle=1;}
-      if(id==='handle')state.doorAngle=state.doorsOpen?1:0;
+      // Visual preparation for detail view — directly set mirror for immediacy.
+      if(id==='hood'&&!state.hood.open){state.hood.open=true;state.hood.angle=1;sendCommand({type:'toggle_hood'});}
+      if(id==='handle'){const anyOpen=Object.values(state.doors).some(d=>d.open);for(const door of Object.values(state.doors))door.angle=anyOpen?1:0;}
       vehicle.update(state,0,'all');
     },
   });
-  const driving=createDriving({canvas,camera,controls,scene,getState:()=>state,resize,toast,
+  const driving=createDriving({canvas,camera,controls,scene,getState:()=>state,resize,toast,sendCommand,
     onEnter(){previousManual=manualCamera;vehicle.root.rotation.y=0;vehicle.update(state,0,'all');},
     onExit(){manualCamera=previousManual;readScroll();},
     onStage(value){studio.setDriving(value);},
   });
-  for(const button of document.querySelectorAll('[data-hood-toggle]')){button.disabled=false;button.addEventListener('click',()=>{
-    state.hoodOpen=!state.hoodOpen;
-    if(inspector.active){state.hoodAngle=state.hoodOpen?1:0;vehicle.update(state,0,'all');inspector.refresh();}
-    syncControls();
+  for(const button of document.querySelectorAll('[data-hood-toggle]')){button.disabled=false;button.addEventListener('click', async ()=>{
+    await sendCommand({type:'toggle_hood'});
+    if(inspector.active){state.hood.angle=state.hood.open?1:0;vehicle.update(state,0,'all');inspector.refresh();}
   });}
   function resize(){
     const rect=inspector.active?inspector.stage.getBoundingClientRect():driving.active?driving.stage.getBoundingClientRect():{width:innerWidth,height:innerHeight};
@@ -144,9 +278,24 @@ async function startScene(){
   let touchDistance=0;
   canvas.addEventListener('touchstart',event=>{if(event.touches.length===2)touchDistance=Math.hypot(event.touches[0].clientX-event.touches[1].clientX,event.touches[0].clientY-event.touches[1].clientY);},{passive:true});
   canvas.addEventListener('touchmove',event=>{if(inspector.active||driving.active||event.touches.length!==2)return;event.preventDefault();const next=Math.hypot(event.touches[0].clientX-event.touches[1].clientX,event.touches[0].clientY-event.touches[1].clientY);if(touchDistance>0){const direction=camera.position.clone().sub(controls.target);direction.setLength(clamp(direction.length()*touchDistance/next,5,19));camera.position.copy(controls.target).add(direction);manualCamera=true;}touchDistance=next;},{passive:false});
-  const clock=new THREE.Clock();let lastUi=0;
+  const clock=new THREE.Clock();let lastUi=0,lastPoll=0;
   function frame(){
-    const dt=Math.min(clock.getDelta(),.05);stepVehicle(state,dt);progress=reduced?scrollProgress:THREE.MathUtils.damp(progress,scrollProgress,5,dt);
+    const dt=Math.min(clock.getDelta(),.05);
+    // Advance state: backend tick in Tauri mode, local tick in browser mode.
+    if (tauriAvailable()) {
+      if (!eventReady && clock.elapsedTime - lastPoll > 0.1) {
+        lastPoll = clock.elapsedTime;
+        window.__TAURI__.core.invoke('get_vehicle_state').then(s => { latestSnapshot = s; }).catch(() => {});
+      }
+      if (latestSnapshot) {
+        followSnapshot(state, latestSnapshot, dt);
+      } else {
+        stepLocalMirror(state, dt);
+      }
+    } else {
+      stepLocalMirror(state, dt);
+    }
+    progress=reduced?scrollProgress:THREE.MathUtils.damp(progress,scrollProgress,5,dt);
     const focused=inspector.active||driving.active;
     if(!focused&&exploring!==wasExploring){manualCamera=false;wasExploring=exploring;}
     if(!focused&&!manualCamera){

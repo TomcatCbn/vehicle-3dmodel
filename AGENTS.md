@@ -15,19 +15,24 @@
 | --- | --- |
 | `index.html`、`src/style.css` | 页面、控制台、细节和行驶弹窗、响应式样式 |
 | `src/main.js` | 场景初始化、控件同步、滚动拆解、拾取和统一动画循环 |
-| `src/state.js` | 车辆状态、目标与实际开度、充电和拆解插值 |
-| `src/vehicle.js` | 读取 GLB 元数据，驱动部件运动、材质、颜色和高亮 |
-| `src/inspection.js` | 细节部件选择、隔离、运动包络取景及相机恢复 |
-| `src/drive-state.js`、`src/driving.js` | 行驶计算、起步条件、道路演示和行驶界面 |
-| `src/studio.js` | 环境照明、阴影、反射和场景展示 |
+| `src/state.js`、`src/lighting-state.js` | 车辆信号状态、目标与实际开度、充电和拆解插值 |
+| `src/tauri-bridge.js` | Tauri/Web 双模式封装（invoke/listen） |
+| `src/render/vehicle.js` | 读取 GLB 元数据，驱动部件运动、材质、颜色和高亮 |
+| `src/render/vehicle-lighting.js` | 灯组材质与发光控制 |
+| `src/render/inspection.js` | 细节部件选择、隔离、运动包络取景及相机恢复 |
+| `src/drive-state.js`、`src/render/driving.js` | 行驶计算、起步条件、道路演示和行驶界面 |
+| `src/render/studio.js` | 环境照明、阴影、反射和场景展示 |
+| `src-tauri/tauri.conf.json` | Tauri 桌面应用配置：窗口、标识、图标路径 |
+| `src-tauri/src/signal/` | Rust SignalModel：状态机、命令处理、联动校验 |
 | `scripts/aura_surface.py` | 共享车身曲面、接边及曲面自检，不依赖 Blender |
 | `scripts/vw_emblem.py` | 共用 VW 字形轮廓和比例自检 |
 | `scripts/build_aura_t6.py` | 生成独立部件、运动元数据、Blender 源文件和 GLB |
 | `scripts/render_aura_t6.py` | 从同一 Blender 模型输出 Cycles 核对图 |
-| `tests/` | 状态、行驶、细节取景及实际 GLB 回归测试 |
+| `scripts/generate_icon.py` | 应用图标生成：薄荷绿 EV 侧影 + 闪电，输出全平台 PNG/ICO/ICNS 和 Web favicon |
+| `tests/` | 状态、行驶、细节取景、灯光状态、车辆灯组、UI 契约及实际 GLB 回归测试 |
 | `models/references/`、`docs/references/aura-t6.md` | 建模参考图、来源和准确性说明 |
 
-先阅读 `README.md`。`docs/superpowers/plans/` 保存各轮改动计划；参考文档中的旧分件数量和旧验证记录属于历史，当前行为以代码和实际资产为准。
+先阅读 `README.md`。`docs/archive/` 保存历史改动计划与评审；参考文档中的旧分件数量和旧验证记录属于历史，当前行为以代码和实际资产为准。
 
 ## 常用命令
 
@@ -83,7 +88,16 @@ blender --background --python scripts/render_aura_t6.py -- --preview --view=trun
 ## 验证与交付
 
 - 逻辑或模型变更运行 `npm test`、`npm run build`；共享曲面和徽标变更还需运行对应 Python 自检。纯文档变更检查内容、路径和命令即可，不要求重建模型。
+- 图标变更运行 `python3 scripts/generate_icon.py`，脚本会重新生成全平台 PNG（Tauri、Windows、Android、iOS）、ICO、ICNS 和 Web favicon。生成后检查 `output/icon-preview.png` 在 512、128、32 像素下的可辨识度。`index.html` 已通过 `<link rel="icon">` 和 `<link rel="apple-touch-icon">` 引用 `public/` 下的图标。
 - 外观变更必须查看实际生成的模型渲染和浏览器画面；检查接缝、曲面反光、玻璃、灯组、内衬穿出，以及闭合、中间和全开姿态。测试通过不能替代视觉核对。
 - 涉及界面、取景或模型尺寸时，核对桌面与手机视口（常用 `1280×900`、`390×844`），相关细节页的旋转、缩放和隔离，以及拆解到 100% 再复位。检查浏览器错误日志，结束后恢复临时视口设置。
 - 在 `output/` 保存有代表性的截图。说明具体改动、实际完成的验证和仍存在的精度边界；引用截图或文件时给出可点击路径。
 - 行为或模型维护流程变化时同步更新 `README.md`；重要外观校准与参考来源更新 `docs/references/aura-t6.md`。不要把未执行的检查写成已通过。
+
+## 踩坑记录
+
+> 这些是实际遇到过的、非直觉的坑。修改前先检查是否涉及这些区域，避免重复踩坑。详见 `docs/decision/lessons-learned.md`。
+
+- **GLB 部件命名用数字 side code，且数字与 side 字段相反**：name 里 `_1` = side=-1 = 左，`_-1` = side=1 = 右。信号→GLB 映射表（`AURA_T6_MAPPING`）必须与 GLB 内 `extras` 的 `name` 和 `label` 字段核对。映射不匹配时部件静默不动——不会报错。新增或修改映射时，用 GLTF 解析脚本核对实际节点名和 label。
+- **serde `#[serde(tag = "type")]` 内部标签模式下 `Option<T>` 收到 JSON `null` 会反序列化失败**。前端发 `{ id: null }` 时 invoke 抛异常。修复方法是给 `Option<T>` 字段加 `#[serde(default)]`，让 `null` 映射为 `None`。新增带 `Option` 的命令变体时必须加此属性。
+- **不要用模块加载时的常量缓存 Tauri 可用性**。`window.__TAURI__` 在 HMR 热更新后可能延迟注入。运行时检查（`tauriAvailable()` 每次调用时判断）才可靠。更不要因为一次失败就设 `tauriFailed = true` 永久跳过 Tauri——这会导致后续命令走本地回退，而本地修改会被 `followSnapshot` 每帧覆盖，表现为"按钮没反应"。

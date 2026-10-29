@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { deriveLighting } from './lighting-state.js';
+import { deriveLighting } from '../lighting-state.js';
 
 export function createVehicleLighting(root) {
   const lamps = [];

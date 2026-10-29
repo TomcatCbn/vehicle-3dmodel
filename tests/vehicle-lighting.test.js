@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { createVehicleLighting } from '../src/vehicle-lighting.js';
+import { createVehicleLighting } from '../src/render/vehicle-lighting.js';
 import { createLightingState } from '../src/lighting-state.js';
 
 const AUTHORED_INTENSITY = {

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createDriveState, isBraking, maxDriveSpeed, setDirection, setDriving, stepDrive, WHEEL_RADIUS } from './drive-state.js';
+import { createDriveState, isBraking, maxDriveSpeed, setDirection, stepDrive, WHEEL_RADIUS } from '../drive-state.js';
 
 const views={front:[-7,2.6,7.6],side:[-.8,1.8,10.5],rear:[7,2.6,7.6]};
 
@@ -29,7 +29,7 @@ function createRoad(scene){
   return {root,update(distance){marks.position.x=distance%9;posts.position.x=distance%12;}};
 }
 
-export function createDriving({canvas,camera,controls,scene,getState,resize,onEnter,onExit,onStage,toast}){
+export function createDriving({canvas,camera,controls,scene,getState,resize,onEnter,onExit,onStage,toast,sendCommand}){
   const dialog=document.querySelector('#drive-dialog'),stage=document.querySelector('#drive-stage');
   const toggle=document.querySelector('#drive-toggle'),range=document.querySelector('#drive-range');
   const road=createRoad(scene),home=canvas.parentNode,next=canvas.nextSibling;
@@ -40,7 +40,11 @@ export function createDriving({canvas,camera,controls,scene,getState,resize,onEn
     document.querySelector('#drive-speed').textContent=Math.round(speed);
     document.querySelector('#drive-distance').textContent=(Math.abs(drive.distance)/1000).toFixed(2);
     document.querySelector('#drive-target').textContent=target;
-    const vehicle=getState(),blocked=vehicle.doorsOpen||vehicle.doorAngle>.01||vehicle.hoodOpen||vehicle.hoodAngle>.01||vehicle.tailgateTarget>.001||vehicle.tailgatePosition>.001||vehicle.plugged;
+    const vehicle=getState();
+    const doorsOpen=vehicle.doors?Object.values(vehicle.doors).some(d=>d.open||d.angle>.01):(vehicle.doorsOpen||vehicle.doorAngle>.01);
+    const hoodOpen=vehicle.hood?.open??vehicle.hoodOpen,hoodAngle=vehicle.hood?.angle??vehicle.hoodAngle;
+    const tgTarget=vehicle.tailgate?.target??vehicle.tailgateTarget,tgPos=vehicle.tailgate?.position??vehicle.tailgatePosition;
+    const blocked=doorsOpen||hoodOpen||hoodAngle>.01||tgTarget>.001||tgPos>.001||vehicle.plugged;
     document.querySelector('#drive-status').textContent=isBraking(drive)?'正在减速':drive.running?(speed<target-.5?'正在加速':'行驶中'):speed>.1?'正在停车':blocked?'请关好车门、机盖、尾门并拔枪':'已停稳';
     toggle.textContent=drive.running?'停车':'起步';toggle.setAttribute('aria-pressed',String(drive.running));
     range.max=limit;range.value=target;range.style.setProperty('--range-progress',`${target/limit*100}%`);
@@ -58,8 +62,15 @@ export function createDriving({canvas,camera,controls,scene,getState,resize,onEn
     direction.sub(target).multiplyScalar(Math.max(1,.95/camera.aspect));
     flushOrbit();controls.target.copy(target);camera.position.copy(target).add(direction);controls.update();
   }
-  function startStop(){
-    if(!setDriving(drive,getState(),!drive.running)){toast('请先关好车门、机盖和尾门，并拔出充电枪，再起步');return;}
+  async function startStop(){
+    const on=!drive.running;
+    if(on){
+      const ok=await sendCommand({type:'toggle_driving',on:true});
+      if(!ok){toast('请先关好车门、机盖和尾门，并拔出充电枪，再起步');return;}
+    }else{
+      await sendCommand({type:'toggle_driving',on:false});
+    }
+    drive.running=on;
     sync();
   }
   const open=event=>{

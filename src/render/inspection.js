@@ -54,9 +54,12 @@ export function isolateMeshes(root,meshes){
 }
 
 export function getInspectionBounds(vehicle,id,state){
-  const meshes=getInspectionMeshes(vehicle,id),box=new THREE.Box3(),motor=id==='rear'?'tailgatePosition':id==='roof'?'sunroofPosition':null;
+  const meshes=getInspectionMeshes(vehicle,id),box=new THREE.Box3();
+  const motor=id==='rear'?'tailgate.position':id==='roof'?'sunroof.position':null;
+  const getMotor=(s,field)=>field==='tailgate.position'?(s.tailgate?.position??s.tailgatePosition??0):field==='sunroof.position'?(s.sunroof?.position??s.sunroofPosition??0):0;
+  const setMotor=(s,field,val)=>{const next={...s};if(field==='tailgate.position'){next.tailgate={...s.tailgate,position:val};next.tailgatePosition=val;}else if(field==='sunroof.position'){next.sunroof={...s.sunroof,position:val};next.sunroofPosition=val;}return next;};
   for(const value of motor?[0,.15,.35,.55,.75,1]:[0]){
-    vehicle.update(motor?{...state,[motor]:value}:state,0);vehicle.root.updateMatrixWorld(true);
+    vehicle.update(motor?setMotor(state,motor,value):state,0);vehicle.root.updateMatrixWorld(true);
     for(const mesh of meshes)box.union(new THREE.Box3().setFromObject(mesh));
   }
   vehicle.update(state,0);vehicle.root.updateMatrixWorld(true);

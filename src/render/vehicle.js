@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { explodeOffset } from './state.js';
+import { explodeOffset } from '../state.js';
 import { createVehicleLighting } from './vehicle-lighting.js';
 
 function polymerGrain(){
@@ -19,15 +19,33 @@ function polymerGrain(){
 }
 
 /** Bind the named, articulated Blender nodes without replacing their authored geometry. */
-export function createVehicle(root) {
+export function createVehicle(root, mapping = {}) {
   const parts = [], effects = [], paintMaterials = [];
   const yAxis = new THREE.Vector3(0,1,0);
   const axle = new THREE.Vector3(0,0,1);
   let serviceGrain;
+  // Build reverse lookup: GLB name → signal id (e.g. "door_l_0" → "door.fl").
+  const glbToSignal = {};
+  for (const [signal, glbName] of Object.entries(mapping)) glbToSignal[glbName] = signal;
   root.traverse(node => {
     if (node.userData.effect) effects.push(node);
     if (!node.userData.part) return;
+    // Preserve the original GLB name for mapping before overwriting with label.
+    node.userData.glbName = node.name;
     node.name = node.userData.label || node.name;
+    // Tag door/window parts with their signal id for independent control.
+    // Window parts also get doorId so they rotate WITH their door (glass is
+    // mounted on the door), while vertical slide is controlled separately
+    // via windowId + state.windows[id].open.
+    const signal = glbToSignal[node.userData.glbName];
+    if (signal) {
+      if (signal.startsWith('door.')) node.userData.doorId = signal.slice(5);
+      if (signal.startsWith('window.')) {
+        const posId = signal.slice(7);
+        node.userData.windowId = posId;
+        node.userData.doorId = posId;  // follow the door at the same position
+      }
+    }
     const meshes = [];
     node.traverse(child => {
       if (!child.isMesh) return;
@@ -78,8 +96,11 @@ export function createVehicle(root) {
   const hoodRotation=new THREE.Quaternion(),tailgateRotation=new THREE.Quaternion(),hinge=new THREE.Vector3(),moving=new THREE.Vector3(),direction=new THREE.Vector3();
   function update(state, progress, layer='all', motion={}) {
     const wheelAngle=motion.wheelAngle||0;
-    hoodRotation.setFromAxisAngle(axle,-(state.hoodAngle||0)*1.12*(1-progress));
-    tailgateRotation.setFromAxisAngle(axle,(state.tailgatePosition||0)*1.45*(1-progress));
+    const hoodAngle = state.hood?.angle ?? state.hoodAngle ?? 0;
+    const tailgatePos = state.tailgate?.position ?? state.tailgatePosition ?? 0;
+    const sunroofPos = state.sunroof?.position ?? state.sunroofPosition ?? 0;
+    hoodRotation.setFromAxisAngle(axle,-hoodAngle*1.12*(1-progress));
+    tailgateRotation.setFromAxisAngle(axle,tailgatePos*1.45*(1-progress));
     for (const part of parts) {
       const data = part.userData;
       const [x,y,z] = explodeOffset(data.offset,progress,data.start,Math.min(1,data.start+.42));
@@ -89,7 +110,7 @@ export function createVehicle(root) {
       if(data.motion==='hood')part.quaternion.premultiply(hoodRotation);
       if(data.motion==='tailgate')part.quaternion.premultiply(tailgateRotation);
       if(data.motion==='sunroof'){
-        const opening=(state.sunroofPosition||0)*(1-progress);
+        const opening=sunroofPos*(1-progress);
         const lift=THREE.MathUtils.smoothstep(opening,0,.15),slide=THREE.MathUtils.smoothstep(opening,.15,1);
         part.position.x+=.78*slide;part.position.y+=.065*lift;
         rotation.setFromAxisAngle(axle,.045*lift*(1-.65*slide));part.quaternion.premultiply(rotation);
@@ -105,10 +126,16 @@ export function createVehicle(root) {
         part.quaternion.premultiply(rotation);
       }
       if (data.motion === 'door' || data.motion === 'window') {
-        rotation.setFromAxisAngle(yAxis,-data.side*state.doorAngle*.95*(1-progress));
+        const doorId = data.doorId;
+        const doorAngle = (doorId && state.doors?.[doorId]) ? state.doors[doorId].angle : (state.doorAngle ?? 0);
+        rotation.setFromAxisAngle(yAxis,-data.side*doorAngle*.95*(1-progress));
         part.quaternion.premultiply(rotation);
       }
-      if (data.motion === 'window') part.position.y -= state.windowOpen*.54*(1-progress);
+      if (data.motion === 'window') {
+        const winId = data.windowId;
+        const winOpen = (winId && state.windows?.[winId]) ? state.windows[winId].open : (state.windowOpen ?? 0);
+        part.position.y -= winOpen*.54*(1-progress);
+      }
       if (lastLayer !== layer) {
         for (const {mesh,opacity,transparent,depthWrite} of data.meshes) {
           const dimmed = layer !== 'all' && data.layer !== layer;

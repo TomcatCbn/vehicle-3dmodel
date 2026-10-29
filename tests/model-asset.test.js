@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as THREE from 'three';
-import { createVehicle } from '../src/vehicle.js';
+import { createVehicle } from '../src/render/vehicle.js';
 import { createState } from '../src/state.js';
 
 async function loadModel() {
