@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::signal::state::{AmbientColor, HeadlightMode};
+use crate::signal::state::{AmbientColor, HeadlightMode, PowerState};
 
 /// VehicleCommand — unified command enum (decision 5 D5.3 + decision 7).
 /// Three sources (local UI, MQTT downstream, BLE RKE) all map to this enum,
@@ -33,6 +33,8 @@ pub enum VehicleCommand {
     /// on = true requests start (interlock checked); on = false is stop (no check).
     /// Driving animation itself stays frontend-side (decision 5 D5.5).
     ToggleDriving { on: bool },
+    /// Change power state (decision 8 D8.2). Shutdown checks driving interlock.
+    SetPower { state: PowerState },
     /// Reset to default state (all closed, locked, battery 68%).
     Reset,
 }

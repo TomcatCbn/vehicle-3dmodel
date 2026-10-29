@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use crate::signal::command::{TailgateAction, VehicleCommand};
 use crate::signal::interlock;
 use crate::signal::state::{
-    DoorState, HoodState, LightingState, SunroofState, TailgateState,
+    DoorState, HoodState, LightingState, PowerState, SunroofState, TailgateState,
     VehicleState, WindowState, AURA_T6_POSITIONS,
 };
 
@@ -43,6 +43,8 @@ impl SignalModel {
                 charging: false,
                 battery: 68.0,
                 lighting: LightingState::default(),
+                power_state: PowerState::Standby,
+                driving: false,
             },
         }
     }
@@ -54,7 +56,11 @@ impl SignalModel {
 
     /// Advance actual positions toward targets. Rust port of stepVehicle
     /// (src/state.js L7-22). Called at ~30-50Hz by the backend tick loop.
+    /// Skipped entirely when power_state is Sleep (decision 8 D8.3).
     pub fn tick(&mut self, dt: f32) {
+        if self.state.power_state == PowerState::Sleep {
+            return;
+        }
         let dt = if dt.is_finite() && dt > 0.0 { dt } else { 0.0 };
 
         // Windows: lerp open toward target (speed 0.5/s)
@@ -114,7 +120,26 @@ impl SignalModel {
 
     /// Apply a command (from local UI / MQTT / BLE). Runs interlock checks,
     /// mutates logic state / targets, returns Ok or an error message.
+    /// Power state gating per decision 8 D8.12:
+    ///   - Sleep: all commands rejected except SetPower and Reset
+    ///   - Standby: high-voltage commands rejected (AC, charging, driving start)
+    ///   - Ready: all commands allowed
     pub fn apply_command(&mut self, cmd: &VehicleCommand) -> Result<(), &'static str> {
+        // Power state gating
+        match self.state.power_state {
+            PowerState::Sleep => {
+                if !matches!(cmd, VehicleCommand::SetPower { .. } | VehicleCommand::Reset) {
+                    return Err("车辆处于休眠状态，请先上电");
+                }
+            }
+            PowerState::Standby => {
+                if interlock::is_high_voltage_command(cmd) {
+                    return Err("高压未闭合，请先上电至 Ready");
+                }
+            }
+            PowerState::Ready => {}
+        }
+
         match cmd {
             VehicleCommand::ToggleLock => {
                 // Locking requires all doors closed; unlocking is always allowed.
@@ -201,6 +226,14 @@ impl SignalModel {
                 if *on {
                     interlock::can_start_driving(&self.state)?;
                 }
+                self.state.driving = *on;
+            }
+            VehicleCommand::SetPower { state: target } => {
+                // Shutdown interlock: cannot enter Sleep while driving (D8.6)
+                if *target == PowerState::Sleep {
+                    interlock::can_shutdown(&self.state)?;
+                }
+                self.state.power_state = *target;
             }
             VehicleCommand::Reset => {
                 let positions: Vec<String> = self.state.doors.keys().cloned().collect();
@@ -267,6 +300,7 @@ mod tests {
     #[test]
     fn cannot_charge_without_plug() {
         let mut m = SignalModel::aura_t6();
+        m.apply_command(&VehicleCommand::SetPower { state: PowerState::Ready }).unwrap();
         assert!(m.apply_command(&VehicleCommand::ToggleCharging).is_err());
         m.apply_command(&VehicleCommand::TogglePlug).unwrap();
         m.apply_command(&VehicleCommand::ToggleCharging).unwrap();
@@ -299,6 +333,7 @@ mod tests {
     #[test]
     fn tick_advances_battery_when_charging() {
         let mut m = SignalModel::aura_t6();
+        m.apply_command(&VehicleCommand::SetPower { state: PowerState::Ready }).unwrap();
         m.apply_command(&VehicleCommand::TogglePlug).unwrap();
         m.apply_command(&VehicleCommand::ToggleCharging).unwrap();
         let b0 = m.snapshot().battery;
@@ -351,5 +386,116 @@ mod tests {
             }
             other => panic!("expected SetWindow, got {other:?}"),
         }
+    }
+
+    // --- Power state tests (decision 8) ---
+
+    #[test]
+    fn defaults_power_state_is_standby() {
+        let m = SignalModel::aura_t6();
+        assert_eq!(m.snapshot().power_state, PowerState::Standby);
+        assert!(!m.snapshot().driving);
+    }
+
+    #[test]
+    fn sleep_rejects_all_commands_except_setpower_and_reset() {
+        let mut m = SignalModel::aura_t6();
+        m.apply_command(&VehicleCommand::SetPower { state: PowerState::Sleep }).unwrap();
+        assert_eq!(m.snapshot().power_state, PowerState::Sleep);
+
+        // Regular commands rejected
+        assert!(m.apply_command(&VehicleCommand::ToggleLock).is_err());
+        assert!(m.apply_command(&VehicleCommand::ToggleDoor { id: None }).is_err());
+        assert!(m.apply_command(&VehicleCommand::ToggleAc).is_err());
+
+        // SetPower and Reset still work
+        assert!(m.apply_command(&VehicleCommand::SetPower { state: PowerState::Standby }).is_ok());
+        assert_eq!(m.snapshot().power_state, PowerState::Standby);
+    }
+
+    #[test]
+    fn standby_rejects_high_voltage_commands() {
+        let mut m = SignalModel::aura_t6();
+        // Already at Standby by default
+        assert_eq!(m.snapshot().power_state, PowerState::Standby);
+
+        // High-voltage commands rejected
+        assert!(m.apply_command(&VehicleCommand::ToggleAc).is_err());
+        assert!(m.apply_command(&VehicleCommand::ToggleCharging).is_err());
+        assert!(m.apply_command(&VehicleCommand::ToggleDriving { on: true }).is_err());
+
+        // Non-high-voltage commands still work
+        assert!(m.apply_command(&VehicleCommand::ToggleLock).is_ok());
+    }
+
+    #[test]
+    fn ready_allows_all_commands() {
+        let mut m = SignalModel::aura_t6();
+        m.apply_command(&VehicleCommand::SetPower { state: PowerState::Ready }).unwrap();
+        assert_eq!(m.snapshot().power_state, PowerState::Ready);
+
+        // High-voltage commands now work (with their own interlocks)
+        assert!(m.apply_command(&VehicleCommand::ToggleAc).is_ok());
+        assert!(m.snapshot().ac);
+    }
+
+    #[test]
+    fn cannot_shutdown_while_driving() {
+        let mut m = SignalModel::aura_t6();
+        m.apply_command(&VehicleCommand::SetPower { state: PowerState::Ready }).unwrap();
+        // Unlock + close doors to allow driving
+        m.apply_command(&VehicleCommand::ToggleLock).unwrap(); // unlock
+        // Doors are already closed by default
+        m.apply_command(&VehicleCommand::ToggleDriving { on: true }).unwrap();
+        assert!(m.snapshot().driving);
+
+        // Cannot shutdown while driving
+        assert!(m.apply_command(&VehicleCommand::SetPower { state: PowerState::Sleep }).is_err());
+
+        // Stop driving first, then shutdown works
+        m.apply_command(&VehicleCommand::ToggleDriving { on: false }).unwrap();
+        assert!(!m.snapshot().driving);
+        assert!(m.apply_command(&VehicleCommand::SetPower { state: PowerState::Sleep }).is_ok());
+    }
+
+    #[test]
+    fn tick_skipped_in_sleep() {
+        let mut m = SignalModel::aura_t6();
+        m.apply_command(&VehicleCommand::ToggleLock).unwrap();
+        m.apply_command(&VehicleCommand::ToggleDoor { id: None }).unwrap();
+        // Door angle is 0 before tick
+        assert!((m.snapshot().doors["fl"].angle - 0.0).abs() < 1e-6);
+
+        // Go to Sleep — tick should be skipped
+        m.apply_command(&VehicleCommand::SetPower { state: PowerState::Sleep }).unwrap();
+        m.tick(1.0);
+        // Angle still 0 — tick was skipped
+        assert!((m.snapshot().doors["fl"].angle - 0.0).abs() < 1e-6);
+
+        // Back to Standby — tick works
+        m.apply_command(&VehicleCommand::SetPower { state: PowerState::Standby }).unwrap();
+        m.tick(1.0);
+        assert!(m.snapshot().doors["fl"].angle > 0.5);
+    }
+
+    #[test]
+    fn serde_set_power() {
+        let json = r#"{"type":"set_power","state":"ready"}"#;
+        let cmd: VehicleCommand = serde_json::from_str(json).unwrap();
+        match cmd {
+            VehicleCommand::SetPower { state } => assert_eq!(state, PowerState::Ready),
+            other => panic!("expected SetPower, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn toggle_driving_sets_driving_flag() {
+        let mut m = SignalModel::aura_t6();
+        m.apply_command(&VehicleCommand::SetPower { state: PowerState::Ready }).unwrap();
+        m.apply_command(&VehicleCommand::ToggleLock).unwrap(); // unlock
+        m.apply_command(&VehicleCommand::ToggleDriving { on: true }).unwrap();
+        assert!(m.snapshot().driving);
+        m.apply_command(&VehicleCommand::ToggleDriving { on: false }).unwrap();
+        assert!(!m.snapshot().driving);
     }
 }

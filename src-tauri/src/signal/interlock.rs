@@ -1,6 +1,7 @@
 //! Interlock checks — consolidated from three existing locations
 //! (main.js event handlers, state.js setCharging, drive-state.js setDriving).
 //! Per decision 5 D5.4 and AGENTS.md interlock conventions.
+//! Power state interlocks per decision 8 D8.6.
 
 use crate::signal::state::VehicleState;
 
@@ -53,4 +54,24 @@ pub fn can_start_driving(state: &VehicleState) -> Result<(), &'static str> {
         return Err("请拔出充电枪");
     }
     Ok(())
+}
+
+/// "行驶中不能熄火" — cannot shutdown while driving (decision 8 D8.6).
+pub fn can_shutdown(state: &VehicleState) -> Result<(), &'static str> {
+    if state.driving {
+        return Err("请先停止行驶");
+    }
+    Ok(())
+}
+
+/// Check if a command requires high-voltage (Ready) power state.
+/// Returns true for AC, charging, and driving start (decision 8 D8.12).
+pub fn is_high_voltage_command(cmd: &crate::signal::command::VehicleCommand) -> bool {
+    use crate::signal::command::VehicleCommand;
+    matches!(
+        cmd,
+        VehicleCommand::ToggleAc
+            | VehicleCommand::ToggleCharging
+            | VehicleCommand::ToggleDriving { on: true }
+    )
 }

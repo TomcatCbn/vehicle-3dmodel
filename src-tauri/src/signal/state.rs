@@ -66,7 +66,19 @@ impl Default for LightingState {
     }
 }
 
-/// VehicleState — three-layer state per decision 5/7.
+/// Power state per decision 8 D8.2.
+/// Sleep = no tick, no MQTT, high-voltage disabled.
+/// Standby = small battery, tick runs, MQTT connected, high-voltage disabled.
+/// Ready = high-voltage closed, all features unlocked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PowerState {
+    Sleep,
+    Standby,
+    Ready,
+}
+
+/// VehicleState — three-layer state per decision 5/7 + power state per decision 8.
 /// Logic fields (locked/doors.*.open/hood.open/ac/plugged/charging/lighting)
 /// are changed by commands. Position fields (doors.*.angle/windows.*.open/
 /// hood.angle/sunroof.position/tailgate.position/battery) are advanced by tick().
@@ -85,6 +97,10 @@ pub struct VehicleState {
     pub charging: bool,
     pub battery: f32,
     pub lighting: LightingState,
+    /// Power state (decision 8 D8.2). Defaults to Standby (auto on load).
+    pub power_state: PowerState,
+    /// Whether the vehicle is currently driving (set by ToggleDriving).
+    pub driving: bool,
 }
 
 /// AURA T6 door/window position ids (per profile, decision 7).

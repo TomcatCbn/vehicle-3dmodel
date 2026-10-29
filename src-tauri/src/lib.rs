@@ -1,6 +1,8 @@
 // M1.3 — SignalModel wired into Tauri: managed state + tick loop + command + event.
 // Decisions 5 (D5.2 backend tick) + 7 (nested VehicleState).
+// M3.1 — File transfer service (CEA2.x protocol, decision 6).
 
+mod file_transfer;
 mod signal;
 
 use std::fs::OpenOptions;
@@ -12,7 +14,9 @@ use serde::Serialize;
 use tauri::{Emitter, Manager, State};
 use tokio::sync::Mutex;
 
+use file_transfer::{FileTransferService, FtConfig};
 use signal::{SignalModel, VehicleCommand, VehicleState};
+use signal::state::PowerState;
 
 /// Per-session log path (under the project's logs/ directory, timestamped filename).
 /// Each app launch gets its own file so logs from different runs don't mix.
@@ -90,14 +94,69 @@ async fn debug_log_js(message: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Tauri command: change power state (decision 8 D8.2).
+/// Returns the updated VehicleState on success.
+#[tauri::command]
+async fn set_power_state(
+    state: PowerState,
+    app_state: State<'_, AppState>,
+) -> Result<VehicleState, String> {
+    let mut model = app_state.model.lock().await;
+    match model.apply_command(&VehicleCommand::SetPower { state }) {
+        Ok(()) => Ok(model.snapshot().clone()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![send_vehicle_command, get_vehicle_state, debug_log_js])
+        .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(tauri::generate_handler![
+            send_vehicle_command,
+            get_vehicle_state,
+            set_power_state,
+            debug_log_js,
+            file_transfer::ft_start_share,
+            file_transfer::ft_stop_share,
+            file_transfer::ft_get_status,
+            file_transfer::ft_get_files,
+            file_transfer::ft_pick_files,
+            file_transfer::ft_remove_file,
+            file_transfer::ft_reset_files,
+        ])
         .setup(|app| {
             // Instantiate the default AURA T6 signal model.
             let model = Arc::new(Mutex::new(SignalModel::aura_t6()));
             app.manage(AppState { model: model.clone() });
+
+            // Initialize file transfer service (decision 6 D6.5: Tauri-only).
+            match FileTransferService::new(FtConfig::default()) {
+                Ok(ft_svc) => {
+                    let ft_arc = Arc::new(ft_svc);
+                    app.manage(std::sync::Mutex::new(Some(ft_arc.clone())));
+
+                    // Start TLS listeners in background.
+                    let ft_for_listeners = ft_arc.clone();
+                    tauri::async_runtime::spawn(async move {
+                        if let Err(e) = Arc::clone(&ft_for_listeners)
+                            .run_listeners()
+                            .await
+                        {
+                            eprintln!("⚠️ File transfer listeners failed: {e}");
+                            debug_log(&format!("FT: listener error: {e}"));
+                        }
+                    });
+
+                    debug_log("FT: file transfer service initialized");
+                }
+                Err(e) => {
+                    eprintln!("⚠️ File transfer service init failed: {e}");
+                    debug_log(&format!("FT: init failed: {e}"));
+                    // Manage an empty state so commands can return a clean error.
+                    app.manage(std::sync::Mutex::new(None::<Arc<FileTransferService>>));
+                }
+            }
 
             // Log session start and print the log file path for easy access.
             debug_log("=== vehicle-simulator session started ===");
