@@ -7,6 +7,7 @@ import { createInspection } from './render/inspection.js';
 import { createDriving } from './render/driving.js';
 import { createMirror, stepLocalMirror, followSnapshot, applyLocalCommand, clamp } from './state.js';
 import { setupFileTransfer } from './file-transfer.js';
+import { setupGarage } from './garage.js';
 import './style.css';
 
 const $ = selector => document.querySelector(selector);
@@ -292,6 +293,8 @@ async function startScene(){
 
   // M3.1: file transfer UI (Tauri-only, enabled inside setupFileTransfer).
   setupFileTransfer();
+  // Decision 08 D8.10: garage page — instance list + create flow.
+  setupGarage();
   function resize(){
     const rect=inspector.active?inspector.stage.getBoundingClientRect():driving.active?driving.stage.getBoundingClientRect():{width:innerWidth,height:innerHeight};
     renderer.setSize(rect.width,rect.height);camera.aspect=rect.width/rect.height;camera.updateProjectionMatrix();

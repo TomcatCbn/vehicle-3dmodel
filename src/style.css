@@ -219,6 +219,53 @@ body[data-page="car"][data-power="sleep"] .ft-open{opacity:.3;pointer-events:non
 .garage-add-btn{min-height:48px;padding:12px 32px;border:1px solid var(--mint);border-radius:8px;background:var(--mint);color:#183625;font-size:14px;margin-top:8px}
 .garage-add-btn:hover{background:#c8f4d4}
 
+/* Garage content (with instances) */
+.garage-content{width:100%;max-width:960px;margin:0 auto}
+.garage-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:32px;flex-wrap:wrap;gap:16px}
+.garage-header .eyebrow{font-size:10px;letter-spacing:2px;color:#7c9492;display:block;margin-bottom:4px}
+.garage-header h2{font-size:28px;font-weight:450;letter-spacing:1px;margin:0;color:#eef0f1}
+.garage-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:20px}
+.garage-card{border:1px solid var(--line);border-radius:12px;padding:20px;background:#ffffff04;transition:border-color .2s,background .2s;display:flex;flex-direction:column;gap:12px}
+.garage-card:hover{border-color:#ffffff30;background:#ffffff08}
+.garage-card-header{display:flex;align-items:center;justify-content:space-between}
+.garage-card-template{font-size:10px;letter-spacing:1.5px;color:#7c9492;text-transform:uppercase;font-family:'Space Grotesk',sans-serif}
+.garage-card-delete{width:24px;height:24px;border:0;background:none;color:#718189;font-size:16px;line-height:1;padding:0;cursor:pointer;border-radius:4px}
+.garage-card-delete:hover{color:#e85;background:#ffffff0a}
+.garage-card-name{font-size:18px;font-weight:500;margin:0;color:#eef0f1}
+.garage-card-meta{margin:0;display:flex;flex-direction:column;gap:4px}
+.garage-card-meta dt{font-size:10px;color:#7e888e;display:inline-block;width:40px}
+.garage-card-meta dd{display:inline;margin:0;font-size:12px;color:#b7c0c0}
+.garage-card-meta dt::after{content:'：'}
+.garage-card-select{margin-top:8px;padding:8px 16px;border:1px solid var(--mint);border-radius:6px;background:transparent;color:var(--mint);font-size:12px;cursor:pointer;transition:background .2s}
+.garage-card-select:hover{background:var(--mint);color:#183625}
+
+/* Garage create dialog */
+.garage-create-dialog{border:1px solid var(--line);border-radius:16px;background:#11181c;color:#eef0f1;padding:0;max-width:480px;width:90vw}
+.garage-create-dialog::backdrop{background:#0c1013cc;backdrop-filter:blur(4px)}
+.garage-create-header{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--line)}
+.garage-create-header h2{font-size:18px;font-weight:500;margin:0}
+.garage-create-close{width:28px;height:28px;border:0;background:none;color:#718189;font-size:20px;cursor:pointer;border-radius:4px}
+.garage-create-close:hover{color:#eef0f1;background:#ffffff0a}
+.garage-create-body{padding:24px}
+.garage-create-hint{font-size:13px;color:#8da3a2;margin:0 0 16px}
+.garage-template-list{display:flex;flex-direction:column;gap:12px}
+.garage-template-card{display:flex;flex-direction:column;gap:4px;text-align:left;padding:16px;border:1px solid var(--line);border-radius:8px;background:#ffffff04;cursor:pointer;transition:border-color .2s,background .2s}
+.garage-template-card:hover{border-color:var(--mint);background:#ffffff08}
+.garage-template-name{font-size:15px;font-weight:500;color:#eef0f1}
+.garage-template-info{font-size:11px;color:#8da3a2}
+.garage-create-form{display:flex;flex-direction:column;gap:16px}
+.garage-form-row{display:flex;flex-direction:column;gap:6px}
+.garage-form-row label{font-size:12px;color:#b7c0c0}
+.garage-form-row input{padding:10px 12px;border:1px solid var(--line);border-radius:6px;background:#0c1013;color:#eef0f1;font-size:14px}
+.garage-form-row input:focus{border-color:var(--mint);outline:none}
+.garage-form-hint{font-size:11px;color:#7e888e;margin:0}
+.garage-form-actions{display:flex;justify-content:space-between;gap:12px;margin-top:8px}
+.garage-form-back{padding:8px 16px;border:1px solid var(--line);border-radius:6px;background:transparent;color:#b7c0c0;font-size:13px;cursor:pointer}
+.garage-form-back:hover{border-color:#ffffff30}
+.garage-form-submit{padding:8px 24px;border:0;border-radius:6px;background:var(--mint);color:#183625;font-size:13px;font-weight:500;cursor:pointer}
+.garage-form-submit:hover{background:#c8f4d4}
+.garage-form-submit:disabled{opacity:.4;cursor:not-allowed}
+
 @media(max-width:700px){
   .header-right{gap:10px}
   .power-control{gap:5px}
@@ -227,4 +274,6 @@ body[data-page="car"][data-power="sleep"] .ft-open{opacity:.3;pointer-events:non
   .conn-indicators{display:none}
   .garage-section{padding:40px 20px}
   .garage-empty h2{font-size:26px}
+  .garage-header h2{font-size:22px}
+  .garage-grid{grid-template-columns:1fr}
 }
