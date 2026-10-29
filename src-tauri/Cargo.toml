@@ -25,6 +25,8 @@ rustls-pemfile = "2"
 sha2 = "0.10"
 uuid = { version = "1", features = ["v4"] }
 base64 = "0.22"
+# Profile module (decision 08 D8.9)
+toml = "0.8"
 
 [profile.release]
 panic = "abort"

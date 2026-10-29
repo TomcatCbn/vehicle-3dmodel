@@ -3,6 +3,7 @@
 // M3.1 — File transfer service (CEA2.x protocol, decision 6).
 
 mod file_transfer;
+mod profile;
 mod signal;
 
 use std::fs::OpenOptions;
@@ -108,6 +109,48 @@ async fn set_power_state(
     }
 }
 
+// ── Profile commands (decision 08 D8.9/D8.10) ──
+
+/// List all built-in vehicle templates.
+#[tauri::command]
+async fn profile_list_templates() -> Result<Vec<profile::VehicleTemplate>, String> {
+    Ok(profile::list_templates())
+}
+
+/// List all saved vehicle instances.
+#[tauri::command]
+async fn profile_list_instances() -> Result<Vec<profile::VehicleInstance>, String> {
+    Ok(profile::list_instances())
+}
+
+/// Create a new vehicle instance from a template.
+#[tauri::command]
+async fn profile_create_instance(
+    template: String,
+    display_name: String,
+    vin: String,
+) -> Result<profile::VehicleInstance, String> {
+    profile::create_instance(&template, &display_name, &vin)
+}
+
+/// Delete a vehicle instance by ID.
+#[tauri::command]
+async fn profile_delete_instance(id: String) -> Result<(), String> {
+    profile::delete_instance(&id)
+}
+
+/// Get the last selected instance ID (for app startup).
+#[tauri::command]
+async fn profile_get_last_instance() -> Result<Option<String>, String> {
+    Ok(profile::get_last_instance_id())
+}
+
+/// Save the last selected instance ID.
+#[tauri::command]
+async fn profile_set_last_instance(id: String) -> Result<(), String> {
+    profile::set_last_instance_id(&id)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -117,6 +160,14 @@ pub fn run() {
             get_vehicle_state,
             set_power_state,
             debug_log_js,
+            // Profile (decision 08 D8.9/D8.10)
+            profile_list_templates,
+            profile_list_instances,
+            profile_create_instance,
+            profile_delete_instance,
+            profile_get_last_instance,
+            profile_set_last_instance,
+            // File transfer (decision 6)
             file_transfer::ft_start_share,
             file_transfer::ft_stop_share,
             file_transfer::ft_get_status,

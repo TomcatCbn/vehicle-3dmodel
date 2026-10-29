@@ -12,11 +12,11 @@
 
 ## 阶段二：Profile 模块
 
-- [ ] 2.1 `profile/mod.rs` — Template + Instance 结构体 + 加载/列表/创建逻辑
-- [ ] 2.2 `profiles/templates/aura-t6.toml` — 内置 AURA T6 模板
-- [ ] 2.3 `profiles/instances/` 目录 + 示例实例
-- [ ] 2.4 `lib.rs` — 注册 profile 模块 + 实例管理 Tauri 命令
-- [ ] 2.5 `cargo build` + `cargo test` 通过
+- [x] 2.1 `profile/mod.rs` — Template + Instance 结构体 + 加载/列表/创建/删除逻辑
+- [x] 2.2 `profiles/templates/aura-t6.toml` — 内置 AURA T6 模板
+- [x] 2.3 `profiles/instances/` 目录 + `.gitkeep`
+- [x] 2.4 `lib.rs` — 注册 profile 模块 + 6 个 Tauri 命令
+- [x] 2.5 `cargo build` + `cargo test` 通过（45/45）
 
 ## 阶段三：前端页面架构
 
