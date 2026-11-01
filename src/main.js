@@ -78,6 +78,7 @@ function switchPage(page) {
 for (const link of document.querySelectorAll('nav .nav-link')) {
   link.addEventListener('click', (e) => { e.preventDefault(); switchPage(link.dataset.page); });
 }
+$('#welcome-car-control').addEventListener('click',()=>switchPage('car'));
 
 async function sendCommand(command) {
   // Welcome page = showroom: operate on the local displayState so the live

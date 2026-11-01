@@ -26,6 +26,23 @@
         <div class="model-heading"><div class="eyebrow"><span></span> VOLKSWAGEN / ID. AURA T6</div><h1>让每一次控制，<br>真实可见<span class="accent">。</span></h1><p>一台虚拟车辆，一个完整的交互世界。</p></div>
         <div class="model-meta"><span class="model-name">ID. AURA <b>T6</b></span><span class="model-type">纯电 SUV · 官网外观参考重建</span><div class="color-options" aria-label="车身颜色（照片近似色值）"><button data-color="#dce2e2" class="color-swatch" style="--swatch:#dce2e2" aria-label="贝珠白" aria-pressed="false"></button><button data-color="#26374d" class="color-swatch" style="--swatch:#26374d" aria-label="星河蓝" aria-pressed="false"></button><button data-color="#7e7580" class="color-swatch" style="--swatch:#7e7580" aria-label="烟霞紫" aria-pressed="false"></button><button data-color="#8faeb0" class="color-swatch selected" style="--swatch:#8faeb0" aria-label="远山绿" aria-pressed="true"></button><button data-color="#777d82" class="color-swatch" style="--swatch:#777d82" aria-label="云雀灰" aria-pressed="false"></button><span id="color-name">远山绿</span></div></div>
         <div class="scene-tools"><div class="view-selector" aria-label="观察视角"><button data-view="perspective" class="selected" aria-pressed="true">自由视角</button><button data-view="side" aria-pressed="false">侧视</button><button data-view="top" aria-pressed="false">俯视</button></div><button class="icon-button" id="reset-camera" aria-label="重置视角" title="重置视角">↺</button><div class="view-selector" aria-label="开场运镜"><button data-entrance-variant="direct" aria-pressed="false">直回</button><button data-entrance-variant="front-logo" class="selected" aria-pressed="true">车头特写</button></div><button class="icon-button" id="replay-intro" aria-label="重播开场动画" title="重播开场动画">▶</button><button class="detail-open" data-inspect-open disabled>放大看细节 <span>↗</span></button><button class="drive-open" data-drive-open disabled data-hv>行驶演示 <span aria-hidden="true">→</span></button><button class="ft-open" id="ft-open" disabled>文件传输 <span aria-hidden="true">↗</span></button><span class="drag-hint">拖动旋转 · 双击部件看细节</span></div>
+        <aside class="welcome-showcase" aria-labelledby="welcome-showcase-title">
+          <span class="eyebrow">3D SHOWCASE × VEHICLE SIMULATOR</span>
+          <h2 id="welcome-showcase-title">一台展车，<br>一个可测试的车端。</h2>
+          <p>面向开发、测试与演示，让车控指令、状态变化与三维反馈清晰可见。</p>
+          <button class="welcome-primary-action" id="welcome-car-control" type="button">
+            <span><strong>进入车控台</strong><small>车门 · 灯光 · 充电 · 状态联动</small></span><span aria-hidden="true">→</span>
+          </button>
+          <div class="welcome-secondary-actions">
+            <button type="button" data-inspect-open disabled>
+              <span class="welcome-action-index">01</span><span><strong>细节与结构演示</strong><small>部件近景 · 开合机构 · 滚动拆解</small></span><span class="welcome-action-arrow" aria-hidden="true">↗</span>
+            </button>
+            <button type="button" data-drive-open disabled data-hv>
+              <span class="welcome-action-index">02</span><span><strong>行驶场景演示</strong><small>起步校验 · 赛道行驶 · 多视角</small></span><span class="welcome-action-arrow" aria-hidden="true">↗</span>
+            </button>
+          </div>
+          <div class="welcome-showcase-foot"><span class="status-dot"></span>三维展示 · 信号模拟 · 交互验证</div>
+        </aside>
         <aside class="control-panel" aria-label="车辆控制台"><div class="panel-heading"><div><span class="eyebrow">LIVE CONTROLS</span><h2>车辆控制台</h2></div><span class="live-indicator"><span class="status-dot"></span>运行中</span></div>
           <div class="panel-group" data-group="connection"><button class="group-header" aria-expanded="true"><span class="group-icon" data-icon="link"></span><span class="group-title">连接状态</span><span class="group-chevron"></span></button><div class="group-body">
             <div class="control-row"><span class="control-icon" data-icon="link"></span><div class="control-label">MQTT<span id="mqtt-status">未连接</span></div></div>

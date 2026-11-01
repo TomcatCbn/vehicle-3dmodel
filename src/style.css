@@ -294,3 +294,45 @@ body[data-page="car"][data-power="sleep"] .detail-open{opacity:.3;pointer-events
   .garage-header h2{font-size:22px}
   .garage-grid{grid-template-columns:1fr}
 }
+
+/* Welcome: vehicle showroom + simulator workflows for development, testing and demos. */
+body:not([data-page="welcome"]) .welcome-showcase{display:none!important}
+body[data-page="welcome"] .scene-tools>.detail-open,
+body[data-page="welcome"] .scene-tools>.drive-open{display:none}
+.welcome-showcase{position:absolute;z-index:2;right:0;top:44%;width:272px;transform:translateY(-50%);color:#e8efeb;text-shadow:0 1px 10px #0004}
+.welcome-showcase>.eyebrow{font-size:8px;letter-spacing:1.6px;color:#a5b9ae}
+.welcome-showcase h2{margin:14px 0 12px;font-size:27px;font-weight:450;line-height:1.38;letter-spacing:.5px}
+.welcome-showcase>p{max-width:255px;margin:0 0 22px;color:#b5c1c2;font-size:11px;line-height:1.9}
+.welcome-primary-action{width:100%;min-height:64px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 15px;border:1px solid #c8edcf;border-radius:7px;background:var(--mint);color:#183625;text-align:left;text-shadow:none;transition:background .2s,transform .2s}
+.welcome-primary-action:hover{background:#cef5d7;transform:translateY(-1px)}
+.welcome-primary-action strong{display:block;font-size:13px;font-weight:600;letter-spacing:.5px}
+.welcome-primary-action small{display:block;margin-top:5px;font-size:9px;color:#43634f}
+.welcome-primary-action>span:last-child{font-size:18px}
+.welcome-secondary-actions{margin-top:13px;border-top:1px solid #ffffff18}
+.welcome-secondary-actions button{width:100%;display:grid;grid-template-columns:24px 1fr auto;align-items:center;gap:8px;min-height:72px;padding:12px 3px;border:0;border-bottom:1px solid #ffffff18;background:transparent;color:#dce6e0;text-align:left;text-shadow:0 1px 8px #0006;transition:background .2s}
+.welcome-secondary-actions button:hover:not(:disabled){background:#b8ebc609}
+.welcome-secondary-actions strong{display:block;font-size:12px;font-weight:500;letter-spacing:.4px}
+.welcome-secondary-actions small{display:block;margin-top:6px;color:#96a9a5;font-size:9px;line-height:1.5}
+.welcome-action-index{font:500 9px/1 'Space Grotesk',sans-serif;color:#80958b}
+.welcome-action-arrow{color:var(--mint);font-size:13px}
+.welcome-showcase-foot{display:flex;align-items:center;gap:8px;margin-top:18px;color:#8da29a;font-size:8px;letter-spacing:1.2px}
+.welcome-showcase-foot .status-dot{width:4px;height:4px;box-shadow:none}
+@media(max-width:1050px) and (min-width:701px){
+  .welcome-showcase{width:238px}
+  .welcome-showcase h2{font-size:23px}
+  .welcome-showcase>p{font-size:10px}
+  .welcome-secondary-actions small{font-size:8px}
+  .welcome-showcase-foot{font-size:7px;letter-spacing:.8px}
+}
+@media(max-width:700px){
+  body[data-page="welcome"] .lab-section{height:1000px;min-height:1000px}
+  .welcome-showcase{top:560px;left:0;right:0;width:100%;transform:none;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .welcome-showcase>.eyebrow,.welcome-showcase>h2,.welcome-showcase>p,.welcome-showcase-foot{display:none}
+  .welcome-primary-action{min-height:66px;justify-content:center;padding:10px 7px;text-align:center}
+  .welcome-primary-action strong{font-size:11px}
+  .welcome-primary-action small,.welcome-primary-action>span:last-child{display:none}
+  .welcome-secondary-actions{display:contents}
+  .welcome-secondary-actions button{min-width:0;min-height:66px;display:flex;align-items:center;justify-content:center;padding:8px 6px;border:1px solid #b8ebc625;border-radius:7px;background:#111b1dcc;text-align:center}
+  .welcome-secondary-actions strong{font-size:10px;line-height:1.5}
+  .welcome-action-index,.welcome-action-arrow,.welcome-secondary-actions small{display:none}
+}

@@ -45,3 +45,21 @@ test('entrance offers direct and front-logo variants with accessible pressed sta
   assert.match(main,/getVariant:\(\)=>entranceVariant/);
   assert.match(main,/entranceVariant=button\.dataset\.entranceVariant/);
 });
+
+test('welcome showroom connects vehicle display with development testing and demo workflows',async()=>{
+  const [page,main,styles]=await Promise.all([
+    readFile(new URL('../index.html',import.meta.url),'utf8'),
+    readFile(new URL('../src/main.js',import.meta.url),'utf8'),
+    readFile(new URL('../src/style.css',import.meta.url),'utf8'),
+  ]);
+  assert.match(page,/class="welcome-showcase" aria-labelledby="welcome-showcase-title"/);
+  assert.match(page,/3D SHOWCASE × VEHICLE SIMULATOR/);
+  assert.match(page,/一台展车，<br>一个可测试的车端。/);
+  assert.match(page,/面向开发、测试与演示/);
+  assert.match(page,/id="welcome-car-control"/);
+  assert.match(page,/data-inspect-open disabled[\s\S]*?细节与结构演示/);
+  assert.match(page,/data-drive-open disabled data-hv[\s\S]*?行驶场景演示/);
+  assert.match(main,/\$\('#welcome-car-control'\)\.addEventListener\('click',\(\)=>switchPage\('car'\)\)/);
+  assert.match(styles,/body:not\(\[data-page="welcome"\]\) \.welcome-showcase/);
+  assert.match(styles,/body\[data-page="welcome"\] \.scene-tools>\.detail-open/);
+});
