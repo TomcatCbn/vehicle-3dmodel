@@ -1,0 +1,158 @@
+import * as THREE from 'three';
+
+export const INSPECTION_VIEWS=[
+  {id:'front',label:'前脸',description:'机盖、前围与分体灯组',direction:[-1,.16,0]},
+  {id:'hood',label:'前舱',description:'冲压内板、隔音衬板与深槽储物舱',direction:[-1,.45,.18]},
+  {id:'rear',label:'车尾',description:'尾灯、后备箱与电动尾门',direction:[1,.18,.18]},
+  {id:'roof',label:'天窗',description:'前活动玻璃、固定玻璃与滑轨',direction:[-.25,1,.45]},
+  {id:'handle',label:'门把手',description:'齐平上盖、内凹握槽与触控标记',direction:[.15,.12,1]},
+  {id:'charge',label:'充电口',description:'双接口凹舱、金属端子、密封圈与联动外盖',direction:[.18,.08,-1],isolated:true},
+  {id:'lamp',label:'车灯',description:'右侧主灯的透镜与反射饰板',direction:[-1,.05,.35],isolated:true},
+  {id:'badge',label:'车标',description:'前车标的字面、外环与底座',direction:[-1,.27,.03],isolated:true},
+  {id:'wheel',label:'轮毂',description:'右前轮毂、轮胎与制动结构',direction:[.10,.10,1],isolated:true},
+  {id:'mirror',label:'后视镜',description:'弧顶楔形镜壳、嵌缝灯条与下缘镜头',direction:[-.65,.14,1]},
+  {id:'sensor',label:'翼子板感知',description:'楔形壳体、凹槽与镜头细节',direction:[-.15,.18,1]},
+  {id:'roof-sensor',label:'车顶感知',description:'低矮曲面外壳与前侧光学窗口',direction:[-1,.65,.65]},
+  {id:'windscreen-sensor',label:'前挡感知',description:'独立双目面板、下护罩与内后视镜',direction:[-1,.12,.05],isolated:true},
+  {id:'key',label:'遥控钥匙',description:'圆润壳体、侧缝与锁车、解锁、车辆及泊车图标',direction:[.35,1,.25],isolated:true},
+  {id:'tire',label:'轮胎',description:'圆润胎肩、胎侧字样、模压细纹与胎面',direction:[.1,.12,1],isolated:true},
+];
+export function getInspectionMeshes(vehicle,id){
+  const names={
+    front:['前保险杠','前舱盖','前贯穿灯带','左纵向方灯','右纵向方灯','左前翼子板','右前翼子板','前挡风玻璃','前挡双目感知'],
+    hood:['前舱盖','前储物舱','左机盖撑杆','右机盖撑杆'],
+    rear:['尾门','后保险杠','后贯穿尾灯','后挡风玻璃','后扰流板','左外侧尾灯','右外侧尾灯','后备箱门框','后备箱内衬','左尾门电动撑杆','右尾门电动撑杆','左后翼子板','右后翼子板','左后侧围','右后侧围'],
+    roof:['电动天窗','全景玻璃车顶','左行李架','右行李架','左侧顶梁','右侧顶梁','车顶激光雷达'],
+    handle:['右前门'],charge:['左后翼子板','左后充电口盖'],
+    lamp:['右纵向方灯'],badge:['前保险杠'],wheel:['右前轮毂','右前轮胎','右前制动盘'],
+    mirror:['右后视镜'],sensor:['右前侧饰条'],'roof-sensor':['车顶激光雷达'],'windscreen-sensor':['前挡双目感知'],key:['遥控钥匙'],tire:['右前轮胎'],
+  };
+  if(!names[id])throw new RangeError('Unknown inspection view');
+  const meshes=[];
+  for(const part of vehicle.parts){
+    if(!names[id].includes(part.name))continue;
+    part.traverse(node=>{if(node.isMesh&&(id!=='badge'||node.material.name.startsWith('VW '))&&(id!=='handle'||node.userData.detail==='handle')&&(id!=='charge'||node.userData.detail?.startsWith('charge')))meshes.push(node);});
+  }
+  return meshes;
+}
+
+export function fitInspectionView(box,direction,aspect,fov=30){
+  if(box.isEmpty())throw new Error('Inspection geometry is unavailable');
+  const target=box.getCenter(new THREE.Vector3()),out=new THREE.Vector3(...direction).normalize();
+  const right=new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),out).normalize();
+  const up=new THREE.Vector3().crossVectors(out,right).normalize();
+  const tangent=Math.tan(THREE.MathUtils.degToRad(fov/2))*.80;
+  let distance=0;
+  for(const x of [box.min.x,box.max.x])for(const y of [box.min.y,box.max.y])for(const z of [box.min.z,box.max.z]){
+    const p=new THREE.Vector3(x,y,z).sub(target);
+    distance=Math.max(distance,p.dot(out)+Math.max(Math.abs(p.dot(up))/tangent,Math.abs(p.dot(right))/(tangent*aspect)));
+  }
+  return {target,position:target.clone().addScaledVector(out,distance),distance};
+}
+
+export function isolateMeshes(root,meshes){
+  const selected=new Set(meshes),saved=[];
+  root.traverse(node=>{if(node.isMesh){saved.push([node,node.visible]);node.visible=selected.has(node);}});
+  return ()=>{for(const [node,visible] of saved)node.visible=visible;};
+}
+
+export function getInspectionBounds(vehicle,id,state){
+  const meshes=getInspectionMeshes(vehicle,id),box=new THREE.Box3();
+  const motor=id==='rear'?'tailgate.position':id==='roof'?'sunroof.position':null;
+  const previewState=id==='charge'?{...state,plugged:true}:state;
+  const getMotor=(s,field)=>field==='tailgate.position'?(s.tailgate?.position??s.tailgatePosition??0):field==='sunroof.position'?(s.sunroof?.position??s.sunroofPosition??0):0;
+  const setMotor=(s,field,val)=>{const next={...s};if(field==='tailgate.position'){next.tailgate={...s.tailgate,position:val};next.tailgatePosition=val;}else if(field==='sunroof.position'){next.sunroof={...s.sunroof,position:val};next.sunroofPosition=val;}return next;};
+  for(const value of motor?[0,.15,.35,.55,.75,1]:[0]){
+    vehicle.update(motor?setMotor(previewState,motor,value):previewState,0);vehicle.root.updateMatrixWorld(true);
+    for(const mesh of meshes)box.union(new THREE.Box3().setFromObject(mesh));
+  }
+  vehicle.update(state,0);vehicle.root.updateMatrixWorld(true);
+  return motor?box.expandByScalar(.04):box;
+}
+
+export function createInspection({canvas,camera,controls,vehicle,resize,onEnter,onExit,onIsolate,getState,onSelect=()=>{}}){
+  const dialog=document.querySelector('#detail-dialog'),stage=document.querySelector('#detail-stage');
+  const isolate=document.querySelector('#detail-isolate'),nav=document.querySelector('#detail-views');
+  const home=canvas.parentNode,next=canvas.nextSibling;
+  let active=false,current='rear',box=null,selected=[],snapshot,opener,restoreVisibility=()=>{},fitDistance=0;
+  nav.innerHTML=INSPECTION_VIEWS.map(view=>`<button type="button" data-detail-view="${view.id}" aria-pressed="false">${view.label}</button>`).join('');
+  function flushOrbit(){const damping=controls.enableDamping;controls.enableDamping=false;controls.update();controls.enableDamping=damping;}
+  function fit(){
+    const view=INSPECTION_VIEWS.find(view=>view.id===current);
+    const pose=fitInspectionView(box,view.direction,camera.aspect,camera.fov);
+    flushOrbit();controls.target.copy(pose.target);camera.position.copy(pose.position);fitDistance=pose.distance;
+    controls.minDistance=Math.max(.04,box.getSize(new THREE.Vector3()).length()*.12);
+    controls.maxDistance=fitDistance*5;controls.update();
+  }
+  function visibility(){
+    restoreVisibility();restoreVisibility=isolate.checked?isolateMeshes(vehicle.root,selected):()=>{};
+    controls.maxPolarAngle=isolate.checked?Math.PI-.04:Math.PI/2-.03;
+    onIsolate(isolate.checked,box);
+  }
+  function updateBox(){
+    box=getInspectionBounds(vehicle,current,getState());
+  }
+  function select(id){
+    restoreVisibility();restoreVisibility=()=>{};current=id;
+    const view=INSPECTION_VIEWS.find(view=>view.id===id);
+    onSelect(id);selected=getInspectionMeshes(vehicle,id);updateBox();
+    document.querySelector('#detail-title').textContent=view.label;
+    document.querySelector('#detail-description').textContent=view.description;
+    canvas.setAttribute('aria-label',`可旋转缩放的${view.label}三维细节`);
+    for(const button of nav.querySelectorAll('button'))button.setAttribute('aria-pressed',String(button.dataset.detailView===id));
+    document.querySelector('#detail-dialog [data-hood-toggle]').hidden=!['front','hood'].includes(id);
+    const motion=['rear','roof'].includes(id),layoutChanged=dialog.classList.contains('motion-detail')!==motion;
+    dialog.classList.toggle('motion-detail',motion);
+    for(const node of dialog.querySelectorAll('[data-motion-view]'))node.hidden=node.dataset.motionView!==id;
+    isolate.checked=Boolean(view.isolated);visibility();fit();if(layoutChanged)resize();
+  }
+  function open(id='rear',trigger=document.activeElement){
+    if(active){select(id);return;}
+    flushOrbit();opener=trigger;
+    snapshot={position:camera.position.clone(),target:controls.target.clone(),near:camera.near,
+      minDistance:controls.minDistance,maxDistance:controls.maxDistance,minPolarAngle:controls.minPolarAngle,maxPolarAngle:controls.maxPolarAngle,
+      enableZoom:controls.enableZoom,enablePan:controls.enablePan,opacity:canvas.style.opacity,label:canvas.getAttribute('aria-label')};
+    active=true;box=null;onEnter();
+    document.body.classList.add('inspection-open');stage.append(canvas);canvas.style.opacity='1';
+    camera.near=.005;controls.enableZoom=true;controls.enablePan=true;controls.minPolarAngle=.04;
+    dialog.showModal();resize();select(id);canvas.focus({preventScroll:true});
+  }
+  function close(){dialog.close();}
+  dialog.addEventListener('close',()=>{
+    if(!active)return;
+    flushOrbit();active=false;restoreVisibility();restoreVisibility=()=>{};box=null;
+    home.insertBefore(canvas,next);canvas.style.opacity=snapshot.opacity;canvas.setAttribute('aria-label',snapshot.label);
+    document.body.classList.remove('inspection-open');camera.near=snapshot.near;
+    for(const key of ['minDistance','maxDistance','minPolarAngle','maxPolarAngle','enableZoom','enablePan'])controls[key]=snapshot[key];
+    controls.target.copy(snapshot.target);camera.position.copy(snapshot.position);controls.update();onIsolate(false);onExit();resize();
+    opener?.focus({preventScroll:true});
+  });
+  function zoom(factor){
+    const offset=camera.position.clone().sub(controls.target);
+    offset.setLength(THREE.MathUtils.clamp(offset.length()*factor,controls.minDistance,controls.maxDistance));
+    camera.position.copy(controls.target).add(offset);controls.update();
+  }
+  for(const button of document.querySelectorAll('[data-inspect-open]')){
+    button.disabled=false;button.addEventListener('click',()=>open('rear',button));
+  }
+  nav.addEventListener('click',event=>{const button=event.target.closest('[data-detail-view]');if(button)select(button.dataset.detailView);});
+  isolate.addEventListener('change',visibility);
+  document.querySelector('#detail-close').addEventListener('click',close);
+  document.querySelector('#detail-reset').addEventListener('click',fit);
+  document.querySelector('#detail-zoom-in').addEventListener('click',()=>zoom(.8));
+  document.querySelector('#detail-zoom-out').addEventListener('click',()=>zoom(1.25));
+  dialog.addEventListener('keydown',event=>{
+    if(event.ctrlKey||event.metaKey||event.altKey)return;
+    if(['+','=','-','r','R'].includes(event.key)){
+      event.preventDefault();if(event.key==='-')zoom(1.25);else if(event.key.toLowerCase()==='r')fit();else zoom(.8);
+    }
+  });
+  return {get active(){return active;},stage,open,refresh(){if(active){updateBox();visibility();fit();}},
+    refit(){
+      if(!box)return;
+      const view=INSPECTION_VIEWS.find(view=>view.id===current),pose=fitInspectionView(box,view.direction,camera.aspect,camera.fov);
+      const offset=camera.position.clone().sub(controls.target).multiplyScalar(pose.distance/fitDistance);
+      fitDistance=pose.distance;controls.maxDistance=fitDistance*5;camera.position.copy(controls.target).add(offset);controls.update();
+    },
+  };
+}

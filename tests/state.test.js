@@ -1,0 +1,91 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createState, createMirror, stepVehicle, setCharging, explodeOffset, applyLocalCommand } from '../src/state.js';
+
+test('vehicle state has independent lighting defaults and no legacy lights flag', () => {
+  const first = createState();
+  const second = createState();
+  assert.deepEqual(first.lighting, { headlights: 'low', tailLights: true, ambient: 'off' });
+  assert.notStrictEqual(first.lighting, second.lighting);
+  assert.equal(Object.hasOwn(first, 'lights'), false);
+});
+
+test('windows move toward a requested position without overshooting', () => {
+  const state = createState();
+  state.windowTarget = 1;
+  stepVehicle(state, 0.5);
+  assert.ok(state.windowOpen > 0 && state.windowOpen < 1);
+  stepVehicle(state, 20);
+  assert.equal(state.windowOpen, 1);
+  state.windowTarget = 0;
+  stepVehicle(state, 20);
+  assert.equal(state.windowOpen, 0);
+});
+test('charging requires a connected cable and stops when unplugged', () => {
+  const state = createState();
+  assert.equal(setCharging(state, true), false);
+  assert.equal(state.charging, false);
+  state.plugged = true;
+  assert.equal(setCharging(state, true), true);
+  const before = state.battery;
+  stepVehicle(state, 20);
+  assert.ok(state.battery > before);
+  state.plugged = false;
+  stepVehicle(state, 1);
+  assert.equal(state.charging, false);
+});
+test('explosion is reversible, clamped, and preserves assembled positions', () => {
+  const offset = [1.5, 3, -2];
+  assert.deepEqual(explodeOffset(offset, -1, 0.2, 0.8), [0, 0, 0]);
+  assert.deepEqual(explodeOffset(offset, 1, 0.2, 0.8), offset);
+  assert.deepEqual(explodeOffset(offset, 0, 0.2, 0.8), [0, 0, 0]);
+  assert.ok(explodeOffset(offset, 0.5, 0.2, 0.8)[1] > 0);
+});
+
+test('bonnet opens and closes progressively without overshooting its requested pose',()=>{
+  const state=createState();
+  assert.equal(state.hoodOpen,false);
+  assert.equal(state.hoodAngle,0);
+  state.hoodOpen=true;stepVehicle(state,.2);
+  assert.ok(state.hoodAngle>0&&state.hoodAngle<1);
+  stepVehicle(state,10);assert.equal(state.hoodAngle,1);
+  state.hoodOpen=false;stepVehicle(state,.2);
+  assert.ok(state.hoodAngle>0&&state.hoodAngle<1);
+  stepVehicle(state,10);assert.equal(state.hoodAngle,0);
+});
+
+test('sunroof and power tailgate move progressively, reverse, stop midway and respect limits',()=>{
+  const state=createState();
+  for(const [position,target] of [['sunroofPosition','sunroofTarget'],['tailgatePosition','tailgateTarget']]){
+    assert.equal(state[position],0);assert.equal(state[target],0);
+    state[target]=1;stepVehicle(state,.5);
+    assert.ok(state[position]>0&&state[position]<1);
+    state[target]=state[position];const paused=state[position];
+    stepVehicle(state,2);assert.equal(state[position],paused);
+    state[target]=0;stepVehicle(state,.1);assert.ok(state[position]<paused);
+    stepVehicle(state,10);assert.equal(state[position],0);
+    state[target]=2;stepVehicle(state,10);assert.equal(state[position],1);
+    state[target]=-1;stepVehicle(state,10);assert.equal(state[position],0);
+  }
+});
+
+test('unlock enters Ready from sleep and standby while locking never requires high voltage',()=>{
+  const state=createMirror();
+  assert.equal(state.powerState,'standby');
+  assert.equal(applyLocalCommand(state,{type:'set_power',state:'ready'}).ok,false);
+  assert.equal(state.powerState,'standby');
+
+  assert.equal(applyLocalCommand(state,{type:'toggle_lock'}).ok,true);
+  assert.equal(state.locked,false);
+  assert.equal(state.powerState,'ready');
+
+  assert.equal(applyLocalCommand(state,{type:'set_power',state:'standby'}).ok,true);
+  assert.equal(applyLocalCommand(state,{type:'toggle_lock'}).ok,true);
+  assert.equal(state.locked,true);
+  assert.equal(state.powerState,'standby');
+
+  assert.equal(applyLocalCommand(state,{type:'set_power',state:'sleep'}).ok,true);
+  assert.equal(applyLocalCommand(state,{type:'toggle_lock'}).ok,true);
+  assert.equal(state.locked,false);
+  assert.equal(state.powerState,'ready');
+});
